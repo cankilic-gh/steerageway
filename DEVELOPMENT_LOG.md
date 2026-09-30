@@ -494,3 +494,234 @@ Target: a public GitHub repository `cankilic-gh/steerageway`, with Vercel static
 - lint and typecheck clean
 - `Test Files  16 passed (16)`, `Tests  125 passed (125)`
 - `vite build` OK
+
+## Visual realism slice 1: V20-inspired hero boat (2026-09-29/30, branch `feat/bayliner-v20-hero-boat`)
+
+Plan: `.hermes/plans/2026-09-29_2337-v20-inspired-hero-boat.md`. Modelling brief: `BLENDER_BAYLINER_V20_PROMPT.md`. Research: `VISUAL_REALISM_RESEARCH.md` (sections 6.1, 9 and 13).
+
+**Scope:**
+- Built: an original, logo-free, Blender-generated open-bow outboard that replaces the procedural player boat on Normal and High, with the procedural boat kept as the fallback.
+- Not touched: `src/sim/**`, controls, camera behavior, water, missions and the HUD.
+- People were not replaced or restyled. The same three figures are only placed on seat anchors when the hero is shown.
+- Beach, trees and dock are planned as Phases 2 and 3, not implemented.
+
+**Assumptions:**
+- The official Bayliner V20 page returned HTTP 403. No manufacturer dimension is verified, so the model is "V20-inspired" and keeps the game's 5.2 m × 2.1 m envelope.
+- Low quality stays procedural and never requests the asset.
+- Material-only slice: no Draco, Meshopt, KTX2 or texture atlas. The only image is a generated 4.9 kB non-skid normal map embedded in the GLB.
+
+### Slice 14: hero boat runtime contract (`tests/unit/heroBoat.test.ts`)
+
+Tests were written first:
+- manifest
+- binding to the named nodes
+- missing-node, prop-parent, envelope/axis and pivot errors
+- rest-rotation normalization
+- per-material static merge
+- shadows only on opaque parts
+- swap, retarget and crew anchors
+- swap back to procedural
+- no anchors
+- loader success, network failure and contract failure (never throws, one warning, no error log)
+
+**RED 1** (`npx vitest run tests/unit/heroBoat.test.ts tests/unit/heroBoatAsset.test.ts`, 23:40):
+- `Test Files 2 failed (2)`, `Tests no tests`.
+- Causes: `Cannot find module '../../src/render/heroBoat'` and `'../../scripts/glb-inspect.mjs'`.
+
+**RED 2** (after `src/render/heroBoat.ts`, the `boatModel.ts` visual grouping and `scripts/glb-inspect.mjs`):
+- `Tests 6 failed | 14 passed (20)`.
+- Five were the asset tests with `ENOENT ... v20-inspired-hero.glb`. This is expected: the asset did not exist yet.
+- One was a wrong assertion in the test itself: `expected 1.2246e-16 to be close to 3.14159`. A half turn about Y decomposes to Euler XYZ (π, 0, π), so the test now checks the quaternion.
+
+**GREEN:** `Tests 15 passed (15)` for the runtime file.
+
+### Slice 15: GLB contract and inspection (`tests/unit/heroBoatAsset.test.ts`, `scripts/glb-inspect.mjs`)
+
+The dependency-free GLB parser checks:
+- magic, version and length
+- no external URIs, and no Draco, Meshopt or KTX2 requirement
+- embedded images
+- each contract node exactly once, with identity rest rotations on EnginePivot, Prop, Wheel and Throttle
+- Prop under EnginePivot
+- Hull bounds and axes: length along +X, beam along Z, keel height and top
+- whole-boat beam
+- EnginePivot and Prop world positions within ±2 cm of the procedural boat
+- helm on starboard (+Z) and lever outboard of the wheel
+- wheel shaft pointing aft and up
+- ≤ 30k triangles and ≤ 16 materials
+- indexed triangle primitives
+- no brand strings
+
+Results:
+- **RED:** `ENOENT` (5 failed) before the generator ran.
+- **GREEN:** `Tests 5 passed (5)` after it.
+
+### Slice 16: browser integration (`tests/e2e/hero-boat.spec.ts`)
+
+Written before the SceneView, app and devtools wiring:
+- the hero loads (`GET ... .glb` 200) and the animated references are the GLB nodes
+- the skipper sits on the starboard helm anchor
+- wheel, lever, outboard steering and prop spin react to keyboard input
+- a blocked asset falls back to the procedural boat with the original crew positions, one warning, and no errors other than the blocked request
+- Low never requests the asset
+
+Results:
+- **RED:** `3 failed` on Chrome, `TypeError: w.__steerageway[f] is not a function` (no `boat()` probe yet).
+- **GREEN:** `6 passed (14.7s)` on Chrome and WebKit.
+
+### Runtime design
+
+`SceneView` still calls `createPlayerBoat()` synchronously. Construction, input and the first frame are unchanged.
+
+`syncBoatVisual()` then:
+1. Starts `loadHeroBoat()` once, on Normal and High only. The loader is a dynamic `GLTFLoader` import.
+2. Waits for `bindHeroBoat()`, which validates the contract, wraps any rest rotation in a `*_Mount`, merges static meshes per material and sets shadows.
+3. Applies `tintSubmerged`.
+4. Runs `compileAsync` only when `KHR_parallel_shader_compile` exists.
+5. Calls `applyBoatVisual()`. This swaps the visual root under the same boat group, retargets `hull`, `enginePivot`, `prop`, `wheel` and `throttle`, carries the `YZX` rotation order and the current rotations over, and seats the existing crew on the anchors.
+
+`setQuality('low')` swaps back to the procedural visual; Normal and High swap the hero back in. `frame()` is untouched: it keeps writing `this.boat.*`, which now points at the active visual.
+
+### Blender generation
+
+Command:
+
+```bash
+npm run asset:boat      # = sh tools/blender/build-hero-boat.sh
+# /Applications/Blender.app/Contents/MacOS/Blender -b --factory-startup --python tools/blender/generate_v20_hero.py -- \
+#   --blend assets-src/blender/v20-inspired-hero.blend --glb public/assets/boats/v20-inspired-hero.glb [--render artifacts/qa/v20-hero --samples 96]
+```
+
+The script is deterministic. Two consecutive runs produced byte-identical GLBs (SHA-1 `3a6ee10d954233808a4911e4f21d179398173b1c`). It runs in under 1 s without renders, and in 87 s for 8 Cycles views at 1600×1000 and 96 samples on the M5 Metal GPU.
+
+**Iterations, judged on the actual renders:**
+
+| # | Triangles | Size | What the renders showed | Fix |
+|---|---|---|---|---|
+| 1 | 50,917 | 1.85 MB | Consoles, aft deck blocks and bow seat bases poked through the flared topsides as white boxes; the console read as a generic box; cowl intake slots looked like teeth | Clamp every interior vertex inside the liner (`|y| ≤ liner(x, z) + 3 cm`); lofted, filleted consoles that follow the windshield; one recessed intake per side |
+| 2 | 40,623 | 1.42 MB | The bow bulkhead face stuck out of the hull near the waterline | Bulkhead outline follows the liner |
+| 3 | 34,481 → 31,425 | 1.26 MB | The throttle sat inside the side-glass post | Lever moved inboard; station, sweep and bevel counts reduced where invisible at game distance |
+| 4 | **29,357** | **1.09 MB** | In game, the aft-facing bow guest's legs pointed at the helm camera | Guest 2 anchor faces forward, as on the procedural boat |
+
+**Final asset** (`node scripts/glb-inspect.mjs`):
+
+| Property | Value |
+|---|---|
+| Size | 1,087,916 bytes |
+| Triangles | 29,357 |
+| Primitives | 55 |
+| Materials | 15 |
+| Embedded images | 1 PNG (4,953 bytes) |
+| External URIs | none |
+| Extensions | clearcoat, emissive_strength, specular, sheen |
+| Hull bounds | X −2.600 to 2.600, Y −0.280 to 1.120, Z ±1.030 |
+| Whole boat | Z ±1.047 (beam 2.094 m incl. rub rail); X to −3.373 (outboard) |
+| EnginePivot | (−2.66, 0.62, 0) |
+| Prop | (−3.06, −0.18, 0) |
+| Wheel | (−0.299, 0.933, 0.53) |
+| Throttle | (−0.02, 1.13, 0.76) |
+
+Triangles per node:
+
+| Node | Triangles |
+|---|---|
+| Hull | 5,393 |
+| Deck | 2,800 |
+| Outboard | 2,516 |
+| Upholstery_Bow | 2,228 |
+| Rails | 2,144 |
+| RubRail | 1,840 |
+| Hardware | 1,692 |
+| Upholstery_AftBench | 1,268 |
+| Console_Companion | 1,138 |
+| Windshield | 1,126 |
+| Wheel | 976 |
+| Prop | 906 |
+| Console_Helm | 794 |
+| Helm_Dash | 784 |
+| Upholstery_Helm | 740 |
+| Upholstery_Companion | 740 |
+| Outboard_Mount | 588 |
+| NavLights | 548 |
+| AftDeck | 520 |
+| SwimPlatform | 464 |
+| Throttle | 152 |
+
+Blender QA renders are in `artifacts/qa/v20-hero/` (not committed): `01-perspective`, `02-port-profile`, `03-starboard-aft`, `04-top-open-bow`, `05-helm-detail`, `06-outboard-detail`, `07-coastal-waterline` and `08-chase-view`. Two are committed as `docs/screenshots/hero-boat-*.jpg`.
+
+### In-game visual QA (`scripts/qa-hero.mjs`, production preview, 1600×900, HUD hidden)
+
+Same poses with `?boat=procedural`, the hero, and the hero with the GLB blocked. Chrome and WebKit gave identical counts.
+
+Scene draw calls and triangles:
+
+| Scene | Procedural calls | Hero calls | Procedural triangles | Hero triangles |
+|---|---|---|---|---|
+| dock (chase) | 91 | 98 | 1,070,511 | 1,099,831 |
+| dock orbit (side) | 171 | 178 | 1,087,159 | 1,116,479 |
+| open water (chase, 9 kn) | 114 | 121 | 910,399 | 939,719 |
+| beach shallows | 94 | 101 | 875,819 | 905,139 |
+| helm camera | 79 | 84 | 1,067,265 | 1,093,947 |
+
+Boat only:
+
+| | Meshes | Triangles |
+|---|---|---|
+| Procedural | 22 | 14,842 |
+| Hero, after the per-material static merge | 23 | 29,357 |
+
+- **Hero readiness** after the title screen appears: 80 ms in Chrome and 66 ms in WebKit.
+- **Console errors:** none in Chrome or WebKit for the procedural or hero runs.
+- **Blocked GLB:** status `failed`, procedural boat shown, crew at the original positions. The only console error is Chrome's own `Failed to load resource: net::ERR_FAILED` for the blocked request; WebKit logs none.
+- **Screenshots inspected:** dock chase, side orbit, open water, beach and helm.
+  - The hero reads as a molded family bowrider: navy side panel, rub rail, framed windshield, bow rails, pleated seating and a detailed outboard.
+  - It sits on the same waterline and pivot.
+  - Movable parts are verified by the e2e probe.
+
+### Performance (`scripts/qa-perf.mjs normal`, headed Chrome, 1920×1080 at DPR 2, Apple M5, 120 Hz cap)
+
+| Scene | Hero fps / p95 / calls / triangles | Procedural (`QA_QUERY='&boat=procedural'`) |
+|---|---|---|
+| basin (no-wake) | 120.0 / 9.6 ms / 184 / 1,112,431 | 120.0 / 9.7 ms / 177 / 1,083,111 |
+| channel | 120.0 / 9.7 ms / 92 / 920,995 | 120.0 / 9.8 ms / 85 / 891,675 |
+| bay planing | 120.0 / 9.7 ms / 117 / 938,251 | 120.0 / 9.9 ms / 110 / 908,931 |
+| beach | 120.0 / 9.8 ms / 100 / 1,044,747 | 120.0 / 9.8 ms / 93 / 1,015,427 |
+| sea breeze bay | 120.0 / 9.4 ms / 131 / 1,079,787 | 120.0 / 9.9 ms / 124 / 1,050,467 |
+| docking | 120.0 / 9.8 ms / 86 / 1,094,425 | 120.0 / 9.8 ms / 79 / 1,065,105 |
+
+Against the research budget (section 9, Normal):
+
+| Budget | Limit | Hero result |
+|---|---|---|
+| p95 frame time | ≤ 10.0 ms | 9.4 to 9.8 ms |
+| Draw calls, worst scene | ≤ 220 | 184 |
+| Triangles, worst scene | ≤ 1.5 M | 1.11 M |
+| Hero asset triangles | ≤ 30k | 29,357 |
+| Hero asset size | ≤ 1.5 MB | 1.09 MB |
+
+- Title and first frame times are unchanged: 339 ms vs 341 ms.
+- **Deviation:** the research's "≤ 6 draws" for the hero assumed a texture atlas. This material-only slice adds +7 scene draw calls (shadow pass included) over the procedural boat. A later atlas and KTX2 pass would cut it.
+
+### Regression found and fixed during verification
+
+- `renderer.compileAsync` logs `KHR_parallel_shader_compile extension not supported` on SwiftShader. That failed the `@ci-smoke` console check under `CI=1`.
+- Fix: precompile only when the extension exists; otherwise shaders compile on first draw. The CI smoke then passed (`1 passed (19.4s)`).
+- Under SwiftShader, the two keyboard-driven hero tests fail at the wheel step for both the hero **and** the procedural fallback. This is the documented CPU-WebGL frame-rate limit. They are tagged `@realtime` like `controls.spec.ts` (metadata only); the asset loading part passed there.
+
+### Verification (Node v22.23.1)
+
+| Check | Result |
+|---|---|
+| `npm run lint` | clean |
+| `npm run typecheck` | clean |
+| `npm test` | `Test Files 18 passed (18)`, `Tests 145 passed (145)` |
+| `npm run build` | OK; the GLB is copied to `dist/assets/boats/` |
+| `npm run e2e` | `44 passed (2.0m)`: 22 on Google Chrome and 22 on WebKit, including the 3 new hero tests per browser |
+| `CI=1 npm run e2e:ci` | `1 passed` |
+| `git diff --stat main -- src/sim` | empty |
+
+### Remaining limitations of this slice
+
+- **No baked AO or texture atlas yet.** Cockpit contact darkening relies on the engine's shadows. The UV strategy for the bake is in the brief (section 9).
+- **The crew figures are the old primitives by design.** People are out of scope. They now sit or stand on the new furniture; the skipper stands at the helm.
+- **No LOD1.** The player boat is always near the camera. LOD1 for moored and traffic craft is specified but not built.

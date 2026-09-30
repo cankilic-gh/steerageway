@@ -35,6 +35,8 @@ export const attachDevtools = (app: App): void => {
       app.view?.setSkyOverride(kind, app.sim ?? undefined);
       return app.view?.skyKind ?? null;
     },
+    /** Hero boat QA: active visual, load status and the animated parts' current rotations. */
+    boat: () => app.view?.boatProbe() ?? null,
     orbit: (radians: number) => {
       if (app.view) app.view.rig.orbit = radians;
     },

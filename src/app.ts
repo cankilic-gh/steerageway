@@ -18,6 +18,8 @@ export interface AppOptions {
   testMode: boolean;
   autopilot: boolean;
   timeScale: number;
+  /** Load the Blender hero boat (false keeps the procedural boat, for before/after QA). */
+  heroBoat: boolean;
 }
 
 export class App {
@@ -89,7 +91,7 @@ export class App {
   /** Builds the 3D scene after the loading screen has painted. */
   async init(): Promise<void> {
     await new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)));
-    this.view = new SceneView(this.canvas, this.settings.quality);
+    this.view = new SceneView(this.canvas, this.settings.quality, { heroBoat: this.opts.heroBoat });
     this.view.setQuality(this.settings.quality);
     this.onResize();
     window.addEventListener('resize', () => this.onResize());

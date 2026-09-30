@@ -34,3 +34,6 @@ Thumbs.db
 *.swp
 *.log
 npm-debug.log*
+
+# Blender autosave/backup copies (the generator is the source of truth)
+*.blend1

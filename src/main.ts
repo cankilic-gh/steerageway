@@ -23,6 +23,7 @@ if (!supportsWebGL2) {
     testMode,
     autopilot: testMode && params.get('autopilot') === '1',
     timeScale: testMode ? Math.max(0.25, Math.min(8, Number(params.get('speed') ?? '1') || 1)) : 1,
+    heroBoat: params.get('boat') !== 'procedural',
   });
   if (testMode) attachDevtools(app);
   void app.init();

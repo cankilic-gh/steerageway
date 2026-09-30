@@ -6,7 +6,7 @@
 
 ![Docking at the fuel dock in Kettle Cove](docs/screenshots/docking.jpg)
 
-A browser-playable 3D small-boat handling game with a real seamanship core. You skipper a 17 ft center-console outboard around fictional Kettle Cove: cast off, idle out of the no-wake zone, run a marked channel out to sea, cross the bay, land two guests on a sandy beach, then bring the boat back through the channel and dock at the fuel dock after the sea breeze fills in.
+A browser-playable 3D small-boat handling game with a real seamanship core. You skipper a 17 ft (5.2 m) open-bow outboard runabout around fictional Kettle Cove: cast off, idle out of the no-wake zone, run a marked channel out to sea, cross the bay, land two guests on a sandy beach, then bring the boat back through the channel and dock at the fuel dock after the sea breeze fills in.
 
 Or pick **Free Cruise** on the title screen: the same boat, water and weather with no objectives, timer or score. Roam, beach or dock when you like.
 
@@ -37,7 +37,10 @@ npm run build          # strict typecheck + Vite production build into dist/
 npm run preview        # serve dist/ at http://localhost:4173
 ```
 
-Everything runs locally. No network access is needed at runtime: fonts are bundled, and all textures, models and audio are generated procedurally.
+Everything runs locally. No network access is needed at runtime:
+- Fonts are bundled.
+- Textures, world models and audio are generated procedurally.
+- The player's hero boat is a same-origin GLB (`public/assets/boats/v20-inspired-hero.glb`) generated from code in Blender (see [Hero boat asset](#hero-boat-asset-blender)).
 
 ## Test and verify
 
@@ -76,7 +79,51 @@ node scripts/qa-shimmer.mjs 4173 chrome                          # frame-to-fram
 node scripts/qa-perf.mjs high 4173                               # perf report for a preset on a given port
 ```
 
-Developer and test mode: open `http://localhost:5173/?test=1` to expose `window.__steerageway` (`start(variant, seed, 'mission' | 'cruise')`, `setSky('sunny' | 'overcast' | null)`, autopilot, fast-forward, teleport, perf). Add `&autopilot=1` to watch the scripted skipper drive the mission, and `&speed=4` to speed it up. Normal play never loads this API.
+Developer and test mode: open `http://localhost:5173/?test=1` to expose `window.__steerageway`. It offers:
+- `start(variant, seed, 'mission' | 'cruise')`
+- `setSky('sunny' | 'overcast' | null)`
+- autopilot, fast-forward, teleport and perf
+- `boat()`: which boat visual is showing, its load status, and the wheel, lever, outboard and prop rotations
+
+Add `&autopilot=1` to watch the scripted skipper drive the mission, and `&speed=4` to speed it up. Add `&boat=procedural` to keep the procedural boat for before/after comparisons. Normal play never loads this API.
+
+## Hero boat asset (Blender)
+
+| | |
+|---|---|
+| ![Original V20-inspired hero boat, Blender QA render](docs/screenshots/hero-boat-blender.jpg) | ![The hero boat in game at the fuel dock](docs/screenshots/hero-boat-dock.jpg) |
+
+The player boat is an original, logo-free, **V20-inspired** open-bow outboard. It is not an official manufacturer model; the design brief and every dimension are in `BLENDER_BAYLINER_V20_PROMPT.md`. It keeps the simulation's 5.2 m × 2.1 m envelope, the waterline, and the outboard pivot of the procedural boat.
+
+- **Source of truth:** `tools/blender/generate_v20_hero.py`, a deterministic Blender 5.2 LTS script with no imported meshes or images. It writes:
+  - the editable `assets-src/blender/v20-inspired-hero.blend`
+  - the runtime `public/assets/boats/v20-inspired-hero.glb` (29,357 triangles, 15 PBR materials, 1.09 MB, no Draco, Meshopt or KTX2, no external URIs)
+- **Regenerate:**
+
+  ```bash
+  npm run asset:boat        # .blend + GLB, then prints the GLB stats (scripts/glb-inspect.mjs)
+  npm run asset:boat:qa     # also renders the Blender QA views into artifacts/qa/v20-hero/
+  BLENDER=/path/to/blender npm run asset:boat   # non-default Blender location
+  ```
+
+- **Runtime** (`src/render/heroBoat.ts`):
+  1. `SceneView` still builds the procedural boat synchronously, so construction, input and the first frame are unchanged.
+  2. On Normal and High it then loads the GLB in the background. `bindHeroBoat` validates the node contract (`Hull`, `EnginePivot`, `Prop`, `Wheel`, `Throttle`), the envelope and the pivot, and merges static meshes per material.
+  3. `applyBoatVisual` swaps it in. The per-frame wheel, lever, outboard and prop writes now drive the GLB nodes, and the existing crew figures move to the seat anchors authored in the asset.
+- **Fallback:** Low quality, a failed or blocked request, or a contract failure keeps the procedural boat. A failure logs one console warning.
+- **Tests:**
+  - `tests/unit/heroBoat.test.ts`: contract, swap and fallback.
+  - `tests/unit/heroBoatAsset.test.ts`: GLB inspection covering nodes, axes, bounds, budgets, no external URIs and no brand strings.
+  - `tests/e2e/hero-boat.spec.ts`: Chrome and WebKit. The hero loads, its parts react, a blocked asset falls back, and Low never requests the asset.
+- **Visual QA** (preview running on the given port) writes procedural, hero and blocked-fallback shots of the same poses, with draw calls and triangles:
+
+  ```bash
+  node scripts/qa-hero.mjs artifacts/qa/v20-hero/game 4173
+  QA_ENGINE=webkit node scripts/qa-hero.mjs artifacts/qa/v20-hero/game 4173
+  QA_QUERY='&boat=procedural' node scripts/qa-perf.mjs normal 4173   # procedural-boat perf baseline
+  ```
+
+- **Licensing:** see `ASSET_LICENSES.md`.
 
 ## Controls
 
@@ -184,7 +231,7 @@ Developer and test mode: open `http://localhost:5173/?test=1` to expose `window.
 - **Handling tuning:** the idle full-lock turning diameter is about 21 m (about 4 boat lengths), wider than the concept report's rough target of 2 boat lengths.
 - **Visual wave fade:** wave displacement and normals fade out beyond about 90 to 600 m from the camera to avoid aliasing. The physics uses full wave amplitude everywhere; near the boat, what you see and what the boat feels are identical.
 - **Art style:** all art is procedural. The realism pass adds physically based water, terrain detail and more detailed props, but the look is still stylized, not photoreal.
-  - No external or CC0 assets are used (Blender was not available), so no KTX2 or Meshopt pipeline was configured.
+  - The only authored model is the Blender hero boat, which is original and material-only (no texture atlas, KTX2 or Meshopt yet). The beach, trees, dock and people are still procedural. They are planned in `.hermes/plans/2026-09-29_2337-v20-inspired-hero-boat.md` (people are out of scope).
   - On the Normal preset the scene is about 0.9 to 1.1 M triangles and 78 to 176 draw calls. It holds 120 fps on an Apple M5; see `DEVELOPMENT_LOG.md`.
 - **Water optics:**
   - Mid-distance water is busier than before (moving ripples and glitter). The High preset (2x pixel ratio) runs about 7% slower than before the water-optics pass; Normal and Low still hold the 120 fps display cap on an Apple M5.
@@ -228,6 +275,6 @@ The `?test=1` query parameter exposes the test API (`window.__steerageway`) in a
 - **Third-party packages:** see `package.json`.
   - [three.js](https://threejs.org/) (MIT).
   - Inter and JetBrains Mono variable fonts via Fontsource (SIL Open Font License 1.1), bundled into the build.
-- **Assets:** all textures, models and audio are generated procedurally in code; there are no third-party art assets.
+- **Assets:** all textures, models and audio are generated in code, including the Blender hero boat (original work, generated by `tools/blender/generate_v20_hero.py`). There are no third-party art assets, logos or trademarks; see `ASSET_LICENSES.md`.
 - **Water reference:** the water optics were informed by a written analysis of a public video by Max ([@maxt3chno](https://x.com/maxt3chno/status/2103960867327115462)). No media from it is included; see `WATER_REFERENCE.md`.
 - **Development:** AI-assisted (Claude), directed by Can Kilic; see `DEVELOPMENT_LOG.md`.

@@ -11,7 +11,8 @@ await context.addInitScript((q) => {
 }, quality);
 const page = await context.newPage();
 const t0 = Date.now();
-await page.goto(`http://localhost:${process.argv[3] ?? '4173'}/?test=1`);
+// QA_QUERY appends URL parameters, e.g. QA_QUERY='&boat=procedural' for the procedural-boat baseline.
+await page.goto(`http://localhost:${process.argv[3] ?? '4173'}/?test=1${process.env.QA_QUERY ?? ''}`);
 await page.waitForSelector('[data-screen="title"]:not(.hidden)');
 const firstFrame = await page.evaluate(() => window.__steerageway.describe().firstFrameMs);
 console.log(`quality=${quality} title visible ${Date.now() - t0} ms after navigation, first rendered frame at ${Math.round(firstFrame)} ms`);

@@ -34,7 +34,9 @@
     "test:watch": "vitest",
     "e2e": "playwright test",
     "verify": "npm run lint && npm run typecheck && npm test && npm run build && npm run e2e",
-    "e2e:ci": "playwright test --grep @ci-smoke"
+    "e2e:ci": "playwright test --grep @ci-smoke",
+    "asset:boat": "sh tools/blender/build-hero-boat.sh",
+    "asset:boat:qa": "sh tools/blender/build-hero-boat.sh --render"
   },
   "engines": {
     "node": "^22.13.0 || ^24.0.0 || >=26.0.0"

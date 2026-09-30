@@ -16,6 +16,7 @@ import {
   Group,
   Mesh,
   MeshBasicMaterial,
+  Object3D,
   MeshPhysicalMaterial,
   MeshStandardMaterial,
   SphereGeometry,
@@ -196,15 +197,39 @@ export const makePerson = (o: PersonOptions, seed = 0): Group => {
   return g;
 };
 
+/** Where the existing crew figures stand or sit on a given boat visual (optional per anchor). */
+export interface CrewSeats {
+  skipper: Object3D | null;
+  guests: (Object3D | null)[];
+}
+
+/**
+ * One swappable look of the player boat: the procedural model below, or the Blender hero GLB (heroBoat.ts).
+ * SceneView animates hull/enginePivot/prop/wheel/throttle of whichever visual is active.
+ */
+export interface BoatVisual {
+  kind: 'procedural' | 'hero';
+  root: Object3D;
+  hull: Object3D;
+  enginePivot: Object3D;
+  prop: Object3D;
+  wheel: Object3D;
+  throttle: Object3D;
+  seats: CrewSeats;
+  materials: Material[];
+}
+
 export interface PlayerBoat {
   group: Group;
-  hull: Mesh;
-  enginePivot: Group;
-  prop: Group;
+  /** The active visual; its root is a child of `group`. The crew stay direct children of `group`. */
+  visual: BoatVisual;
+  hull: Object3D;
+  enginePivot: Object3D;
+  prop: Object3D;
   guests: Group[];
   skipper: Group;
-  wheel: Group;
-  throttle: Group;
+  wheel: Object3D;
+  throttle: Object3D;
   materials: Material[];
 }
 
@@ -277,6 +302,9 @@ const makeNonSkid = (): CanvasTexture => {
  */
 export const createPlayerBoat = (): PlayerBoat => {
   const group = new Group();
+  const visual = new Group();
+  visual.name = 'ProceduralBoat';
+  group.add(visual);
   const hullSpec: HullSpec = {
     length: 5.2,
     beam: 2.1,
@@ -309,7 +337,7 @@ export const createPlayerBoat = (): PlayerBoat => {
   const hull = new Mesh(buildHull(hullSpec), mats['hull']);
   hull.castShadow = true;
   hull.receiveShadow = true;
-  group.add(hull);
+  visual.add(hull);
 
   const halfBeam = (t: number) => (t < 0.45 ? 1.05 * (0.9 + 0.1 * (t / 0.45)) : 1.05 * Math.sqrt(Math.max(0.0004, 1 - ((t - 0.45) / 0.55) ** 2)));
   const sheerAt = (t: number) => lerp(hullSpec.sheerAft, hullSpec.sheerBow, t * t);
@@ -326,7 +354,7 @@ export const createPlayerBoat = (): PlayerBoat => {
   deckGeo.setAttribute('uv', new BufferAttribute(uv, 2));
   const deck = new Mesh(deckGeo, mats['deck']);
   deck.receiveShadow = true;
-  group.add(deck);
+  visual.add(deck);
 
   const parts = new PartSet();
   const linerPos: number[] = [];
@@ -397,7 +425,7 @@ export const createPlayerBoat = (): PlayerBoat => {
   const shield = new Mesh(new BoxGeometry(0.015, 0.4, 0.8), glass);
   shield.position.set(0.52, 1.5, 0);
   shield.rotation.z = -0.5;
-  group.add(shield);
+  visual.add(shield);
   parts.add(
     'steel',
     tube([new Vector3(0.44, 1.32, -0.42), new Vector3(0.6, 1.66, -0.4), new Vector3(0.62, 1.68, 0), new Vector3(0.6, 1.66, 0.4), new Vector3(0.44, 1.32, 0.42)], 0.014, 32),
@@ -452,9 +480,9 @@ export const createPlayerBoat = (): PlayerBoat => {
   parts.add('steel', new CylinderGeometry(0.014, 0.014, 1.1, 6), -2.42, 1.3, 0.72);
   const sternL = new Mesh(new SphereGeometry(0.04, 8, 6), new MeshBasicMaterial({ color: 0xffffff }));
   sternL.position.set(-2.42, 1.87, 0.72);
-  group.add(redL, greenL, sternL);
+  visual.add(redL, greenL, sternL);
 
-  parts.build(group, mats);
+  parts.build(visual, mats);
 
   // Steering wheel (turns with the helm).
   const wheel = new Group();
@@ -469,7 +497,7 @@ export const createPlayerBoat = (): PlayerBoat => {
     wheelParts.add('steel', new BoxGeometry(0.17, 0.012, 0.012), Math.cos(a) * 0.085, 0, Math.sin(a) * 0.085, 0, -a, 0);
   }
   wheelParts.build(wheel, mats);
-  group.add(wheel);
+  visual.add(wheel);
 
   // Throttle handle (follows the lever).
   const throttle = new Group();
@@ -478,7 +506,7 @@ export const createPlayerBoat = (): PlayerBoat => {
   tParts.add('steel', new CylinderGeometry(0.012, 0.012, 0.2, 8), 0, 0.1, 0);
   tParts.add('dark', new CylinderGeometry(0.025, 0.025, 0.1, 10), 0, 0.2, 0, Math.PI / 2);
   tParts.build(throttle, mats);
-  group.add(throttle);
+  visual.add(throttle);
 
   // Outboard: bracket, cowl with trim band, midsection, anti-ventilation plate, gearcase, skeg, prop.
   const enginePivot = new Group();
@@ -504,7 +532,7 @@ export const createPlayerBoat = (): PlayerBoat => {
   }
   pParts.build(prop, mats);
   enginePivot.add(prop);
-  group.add(enginePivot);
+  visual.add(enginePivot);
 
   // Crew: skipper at the helm, two guests on the cooler seat and bow.
   const skipper = makePerson({ shirt: 0x2f5d8a }, 1);
@@ -514,8 +542,17 @@ export const createPlayerBoat = (): PlayerBoat => {
   const g2 = makePerson({ shirt: 0x7a3d6e, seated: true }, 2);
   g2.position.set(1.72, 0.58, 0.25);
   group.add(skipper, g1, g2);
+  const anchor = (from: Group): Object3D => {
+    const a = new Object3D();
+    a.position.copy(from.position);
+    visual.add(a);
+    return a;
+  };
+  const seats: CrewSeats = { skipper: anchor(skipper), guests: [anchor(g1), anchor(g2)] };
 
-  return { group, hull, enginePivot, prop, guests: [g1, g2], skipper, wheel, throttle, materials: [...Object.values(mats), glass] };
+  const materials = [...Object.values(mats), glass];
+  const boatVisual: BoatVisual = { kind: 'procedural', root: visual, hull, enginePivot, prop, wheel, throttle, seats, materials };
+  return { group, visual: boatVisual, hull, enginePivot, prop, guests: [g1, g2], skipper, wheel, throttle, materials };
 };
 
 export type CraftType = 'cruiser' | 'runabout' | 'sailboat' | 'skiff' | 'kayak';

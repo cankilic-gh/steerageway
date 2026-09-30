@@ -37,7 +37,8 @@ import { Water } from './water';
 import { addUnderwaterAbsorption, buildTerrain, type TerrainOptics } from './terrain';
 import { refractedCos, SKY_PRESETS, skyForVariant, type SkyKind } from './waterOptics';
 import { buildWorldProps, type WorldProps } from './props';
-import { createCraft, createPlayerBoat, type PlayerBoat } from './boatModel';
+import { createCraft, createPlayerBoat, type BoatVisual, type PlayerBoat } from './boatModel';
+import { applyBoatVisual, loadHeroBoat } from './heroBoat';
 import { Spray, WakeTrail } from './effects';
 import { Assists } from './assists';
 import { CameraRig } from './cameraRig';
@@ -90,6 +91,13 @@ const patchSky = (sky: Sky): Sky => {
   return sky;
 };
 
+export interface SceneViewOptions {
+  /** Load the Blender hero boat (default true). `?boat=procedural` turns it off for before/after QA. */
+  heroBoat?: boolean;
+}
+
+export type HeroBoatStatus = 'idle' | 'loading' | 'ready' | 'failed' | 'disabled';
+
 /** High already renders at up to 2x pixel ratio, so it needs less multisampling than Normal. */
 const msaaSamples = (q: Quality): number => (q === 'low' ? 0 : q === 'high' ? 2 : 4);
 
@@ -102,6 +110,12 @@ export class SceneView {
   private readonly water: Water;
   private readonly props: WorldProps;
   private readonly boat: PlayerBoat;
+  /** The procedural boat is always built first and stays as the fallback (asset failure and Low quality). */
+  private readonly proceduralBoat: BoatVisual;
+  private heroBoat: BoatVisual | null = null;
+  private heroStatus: HeroBoatStatus = 'idle';
+  private readonly heroEnabled: boolean;
+  private disposed = false;
   private readonly wake: WakeTrail;
   private readonly spray = new Spray();
   readonly assists = new Assists();
@@ -147,8 +161,9 @@ export class SceneView {
   private skyKindNow: SkyKind = 'sunny';
   private skyOverride: SkyKind | null = null;
 
-  constructor(canvas: HTMLCanvasElement, quality: Quality) {
+  constructor(canvas: HTMLCanvasElement, quality: Quality, options: SceneViewOptions = {}) {
     this.quality = quality;
+    this.heroEnabled = options.heroBoat !== false;
     this.renderer = new WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance', stencil: false });
     // The scene renders into a linear half-float target and is tone mapped once at the end, so transparent layers
     // (the water's reflection over the seabed seen through it) add up in linear light before any compression.
@@ -204,6 +219,7 @@ export class SceneView {
     if (r4) this.R4Home.copy(r4.position);
 
     this.boat = createPlayerBoat();
+    this.proceduralBoat = this.boat.visual;
     this.scene.add(this.boat.group);
     this.boat.group.rotation.order = 'YZX';
     this.boat.enginePivot.rotation.order = 'YZX';
@@ -220,6 +236,65 @@ export class SceneView {
     this.tintSubmerged(this.props.root);
     this.tintSubmerged(this.boat.group);
     this.tintSubmerged(this.debris);
+    this.syncBoatVisual();
+  }
+
+  /** Shows the hero boat when it is loaded and the quality allows it, otherwise the procedural boat. Starts the load once. */
+  private syncBoatVisual(): void {
+    const wantHero = this.heroEnabled && this.quality !== 'low';
+    if (wantHero && this.heroStatus === 'idle') void this.loadHero();
+    applyBoatVisual(this.boat, wantHero && this.heroBoat ? this.heroBoat : this.proceduralBoat);
+  }
+
+  /** Non-blocking hydration: the procedural boat is on screen until the GLB is bound and its shaders are compiled. */
+  private async loadHero(): Promise<void> {
+    this.heroStatus = 'loading';
+    const visual = await loadHeroBoat();
+    if (this.disposed) return;
+    if (!visual) {
+      this.heroStatus = 'failed';
+      return;
+    }
+    this.tintSubmerged(visual.root);
+    // Precompile off the main thread where the driver can; otherwise (e.g. SwiftShader) shaders compile on first draw.
+    if (this.renderer.extensions.has('KHR_parallel_shader_compile')) {
+      try {
+        await this.renderer.compileAsync(visual.root, this.camera, this.scene);
+      } catch {
+        // The swap still happens; shaders then compile on first draw.
+      }
+    }
+    if (this.disposed) return;
+    this.heroBoat = visual;
+    this.heroStatus = 'ready';
+    this.syncBoatVisual();
+  }
+
+  /** Test and QA probe (?test=1): which boat is showing and the state of its animated parts. */
+  boatProbe(): Record<string, unknown> {
+    const b = this.boat;
+    let meshes = 0;
+    let triangles = 0;
+    b.visual.root.traverse((o) => {
+      const m = o as Mesh;
+      if (!m.isMesh) return;
+      meshes++;
+      triangles += (m.geometry.index ? m.geometry.index.count : m.geometry.getAttribute('position').count) / 3;
+    });
+    const disabled = !this.heroEnabled || (this.quality === 'low' && this.heroStatus === 'idle');
+    return {
+      variant: b.visual.kind,
+      status: disabled ? 'disabled' : this.heroStatus,
+      nodes: { hull: b.hull.name, enginePivot: b.enginePivot.name, prop: b.prop.name, wheel: b.wheel.name, throttle: b.throttle.name },
+      wheelY: b.wheel.rotation.y,
+      throttleZ: b.throttle.rotation.z,
+      engineY: b.enginePivot.rotation.y,
+      propX: b.prop.rotation.x,
+      skipper: b.skipper.position.toArray(),
+      guestsVisible: b.guests.map((g) => g.visible),
+      meshes,
+      triangles,
+    };
   }
 
   private readonly tinted = new WeakSet<Material>();
@@ -320,6 +395,7 @@ export class SceneView {
       this.hdr.dispose();
     }
     this.applyPixelRatio();
+    this.syncBoatVisual();
   }
 
   private applyPixelRatio(): void {
@@ -574,6 +650,7 @@ export class SceneView {
   }
 
   dispose(): void {
+    this.disposed = true;
     this.renderer.dispose();
   }
 }
