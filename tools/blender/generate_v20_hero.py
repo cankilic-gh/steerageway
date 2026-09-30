@@ -169,23 +169,26 @@ def section(x, include_rails=True):
 
     add(v(0.0), 'keel')
     rails = [0.34, 0.68] if include_rails else []
+    # Spray rails and the chine flat are slim, conformal steps that die out well before the stem.
+    rail_fade = 1 - smooth(0.70, 0.86, t)
+    chine_fade = lerp(1.0, 0.3, smooth(0.70, 0.95, t))
     s_list = [0.11, 0.22, 'R0', 0.46, 0.57, 'R1', 0.80, 0.90]
     for s in s_list:
         if isinstance(s, str):
             if not rails:
                 continue
             sr = rails[int(s[1])]
-            w = 0.026 * k
+            w = max(0.0015, 0.016 * k * rail_fade)
             a = v(sr)
             add(a, 'rail')
-            add(Vector((a.x + w, a.y - 0.004 * k)), 'rail')
+            add(Vector((a.x + w, a.y - 0.0025 * k * rail_fade)), 'rail')
             add(v(sr + w / max(hbc, 1e-4)), 'rail')
         else:
             add(v(s))
     chine = v(1.0)
     add(chine, 'chine')
-    wc = 0.055 * k
-    q = Vector((chine.x + wc, chine.y - 0.010 * k))
+    wc = 0.040 * k * chine_fade
+    q = Vector((chine.x + wc, chine.y - 0.008 * k * chine_fade))
     add(q, 'chine')
     r = Vector((q.x + 0.004 * k, q.y + 0.014 * k))
     add(r, 'topside')
@@ -291,16 +294,16 @@ def make_nonskid_normal(size=256, cells=8):
 
 def build_materials():
     # Linear base colors. Gelcoat stays below 0.8 albedo so it does not clip in the sun (research section 8).
-    principled('Gelcoat_White', (0.76, 0.765, 0.75), 0.24, coat=1.0, coat_rough=0.07, double=True)
+    principled('Gelcoat_White', (0.675, 0.685, 0.685), 0.32, coat=0.6, coat_rough=0.10, double=True)
     principled('Hull_Navy', (0.018, 0.034, 0.075), 0.22, coat=1.0, coat_rough=0.06, double=True)
     principled('Bottom_Paint', (0.030, 0.034, 0.042), 0.78, double=True, spec=0.3)
-    principled('NonSkid', (0.56, 0.56, 0.535), 0.62, normal_img=make_nonskid_normal(), normal_strength=0.8, double=True)
-    principled('Vinyl_Ivory', (0.66, 0.63, 0.56), 0.46, sheen=0.25)
+    principled('NonSkid', (0.45, 0.455, 0.452), 0.76, normal_img=make_nonskid_normal(), normal_strength=0.8, double=True)
+    principled('Vinyl_Ivory', (0.62, 0.565, 0.45), 0.52, sheen=0.3)
     principled('Vinyl_Graphite', (0.035, 0.040, 0.048), 0.52, sheen=0.25)
     principled('Stainless', (0.80, 0.81, 0.82), 0.20, metal=1.0)
     principled('Rubber_Black', (0.016, 0.017, 0.019), 0.55, spec=0.4)
     principled('Glass_Smoke', (0.10, 0.13, 0.14), 0.03, alpha=0.32, double=True)
-    principled('Display_Glass', (0.006, 0.008, 0.011), 0.08, emission=(0.02, 0.06, 0.10), strength=1.0)
+    principled('Display_Glass', (0.006, 0.008, 0.011), 0.28, emission=(0.015, 0.05, 0.085), strength=0.8, spec=0.25)
     principled('Cowl_Graphite', (0.045, 0.048, 0.052), 0.32, metal=0.55, coat=1.0, coat_rough=0.05)
     principled('Engine_Dark', (0.020, 0.021, 0.023), 0.45)
     principled('NavLight_Red', (0.6, 0.02, 0.02), 0.2, emission=(1.0, 0.04, 0.03), strength=6.0)
@@ -769,9 +772,11 @@ def build_deck(root):
 def build_aft_deck(root):
     """Aft deck corner blocks, the outboard splash well and its forward wall, clamped inside the liner."""
     mb = MB('AftDeck')
+    # Corner blocks follow the raked transom (aft face just inside it) with generously filleted molded edges.
+    corner = [(-2.235, 0.28), (-2.235, 0.885), (rake_x(X0, 0.885) + 0.006, 0.885), (rake_x(X0, 0.28) + 0.006, 0.28)]
     for side in (1, -1):
-        mb.add(rbox(0.30, 0.58, 0.60, 0.025, 2), 'Gelcoat_White', trs((-2.395, side * 0.69, 0.58)))
-        mb.add(rbox(0.24, 0.44, 0.006, 0.02, 1), 'NonSkid', trs((-2.40, side * 0.66, 0.883)))
+        mb.add(prism(corner, 0.40 * side, 0.99 * side, r=0.045, seg=2), 'Gelcoat_White')
+        mb.add(rbox(0.21, 0.40, 0.006, 0.02, 1), 'NonSkid', trs((-2.385, side * 0.64, 0.886)))
     mb.add(rbox(0.26, 0.82, 0.30, 0.03, 2), 'Gelcoat_White', trs((-2.40, 0, 0.42)))
     mb.add(rbox(0.05, 0.82, 0.40, 0.02, 2), 'Gelcoat_White', trs((-2.28, 0, 0.68)))
     return mb.build(root, sharp=40, uv_scale={'NonSkid': 6.25}, inside=0.035)
@@ -879,12 +884,16 @@ def build_helm_dash(root):
     on_face = on_dash
 
     mb.add(rbox(0.25, 0.64, 0.012, 0.03, 2), 'Rubber_Black', on_face(0.55, -0.60))
-    # Multifunction display (upper inboard) and two gauges (upper outboard) with stainless bezels.
+    # Multifunction display in a black housing (upper inboard) and two gauges (upper outboard): dark glass faces
+    # recessed below slim stainless bezel rings, with a needle for depth and readability.
     mb.add(rbox(0.13, 0.20, 0.012, 0.012, 1), 'Display_Glass', on_face(0.70, -0.38, 0.008))
-    mb.add(rbox(0.15, 0.22, 0.008, 0.014, 1), 'Stainless', on_face(0.70, -0.38, 0.003))
-    for gy in (-0.72, -0.83):
-        mb.add(cylinder(0.042, 0.012, 16), 'Stainless', on_face(0.70, gy, 0.004))
-        mb.add(cylinder(0.035, 0.004, 16), 'Display_Glass', on_face(0.70, gy, 0.016))
+    mb.add(rbox(0.15, 0.22, 0.008, 0.014, 1), 'Rubber_Black', on_face(0.70, -0.38, 0.003))
+    for gy, ang in ((-0.72, 2.3), (-0.83, 1.4)):
+        mb.add(cylinder(0.041, 0.010, 16), 'Rubber_Black', on_face(0.70, gy, 0.002))
+        mb.add(cylinder(0.033, 0.0035, 16), 'Display_Glass', on_face(0.70, gy, 0.009))
+        mb.add(torus(0.036, 0.0045, 16, 4), 'Stainless', on_face(0.70, gy, 0.013))
+        needle = on_face(0.70, gy, 0.0125) @ Matrix.Rotation(ang, 4, 'Z') @ Matrix.Translation((0.010, 0, 0.001))
+        mb.add(rbox(0.022, 0.0028, 0.0016, 0.0006, 1), 'Stainless', needle)
     # Rocker switch row.
     mb.add(rbox(0.024, 0.17, 0.01, 0.004, 1), 'Stainless', on_face(0.28, -0.47, 0.008))
     # Tilt-helm shroud from the dash into the wheel hub.
@@ -892,10 +901,9 @@ def build_helm_dash(root):
     shaft_base = hub_at - HELM_AXIS * 0.15
     mb.add(tube([shaft_base, hub_at - HELM_AXIS * 0.025], 0.03, 14, radius_fn=lambda s: 1.0 - 0.35 * s), 'Rubber_Black')
     mb.add(cylinder(0.055, 0.02, 20), 'Rubber_Black', Matrix.Translation(shaft_base - HELM_AXIS * 0.005) @ axis_to_z(HELM_AXIS))
-    # Throttle binnacle (side-mount box on the dash top, outboard of the wheel).
+    # Side-mount control box on the dash top, outboard of the wheel; the lever pivots on its inboard face.
     tb = throttle_pivot()
-    mb.add(rbox(0.16, 0.085, 0.17, 0.03, 2), 'Rubber_Black', trs((tb.x, tb.y, tb.z - 0.06)))
-    mb.add(rbox(0.12, 0.09, 0.012, 0.006, 1), 'Stainless', trs((tb.x, tb.y, tb.z + 0.026)))
+    mb.add(rbox(0.13, 0.07, 0.11, 0.025, 2), 'Rubber_Black', trs((tb.x, tb.y, tb.z - 0.04)))
     return mb.build(root, sharp=40)
 
 
@@ -979,19 +987,20 @@ def bucket_seat(mb, x, y):
 
 
 def build_upholstery(root):
-    # Aft bench: molded base with toe kick, three seat cushions and three pleated backrest sections.
+    # Aft bench: molded base with toe kick, one full-width seat cushion and one backrest pad, divided into three
+    # seating positions only by shallow graphite welt seams, with continuous front piping and top bolster.
     mb = MB('Upholstery_AftBench')
     yin = liner_inner_y(-2.05, 0.6) - 0.01
     mb.add(rbox(0.40, 2 * yin, 0.32, 0.03, 2), 'Gelcoat_White', trs((-2.07, 0, 0.44)))
     mb.add(rbox(0.36, 2 * yin - 0.04, 0.06, 0.015, 1), 'Rubber_Black', trs((-1.89, 0, 0.31)))
-    w = (2 * yin - 0.03) / 3
-    for k in (-1, 0, 1):
-        y = k * (w + 0.012)
-        cushion(mb, 0.42, w, 0.11, trs((-2.06, y, 0.655)), piping_edges=[((0.205, -w / 2 + 0.03, 0.05), (0.205, w / 2 - 0.03, 0.05))])
-        back = trs((-2.225, y, 0.86), (0, math.radians(-10), 0))
-        for zc in (-0.085, 0.0, 0.085):
-            mb.add(rbox(0.075, w - 0.02, 0.078, 0.03, 1), 'Vinyl_Ivory', back @ Matrix.Translation((0, 0, zc)))
-        mb.add(rbox(0.06, w, 0.03, 0.012, 2), 'Vinyl_Graphite', back @ Matrix.Translation((0.0, 0, 0.14)))
+    w = 2 * yin - 0.02
+    cushion(mb, 0.42, w, 0.11, trs((-2.06, 0, 0.655)), piping_edges=[((0.205, -w / 2 + 0.03, 0.05), (0.205, w / 2 - 0.03, 0.05))])
+    back = trs((-2.225, 0, 0.86), (0, math.radians(-10), 0))
+    mb.add(rbox(0.075, w - 0.02, 0.245, 0.032, 2), 'Vinyl_Ivory', back)
+    mb.add(rbox(0.06, w, 0.03, 0.012, 2), 'Vinyl_Graphite', back @ Matrix.Translation((0.0, 0, 0.135)))
+    for y in (-w / 6, w / 6):
+        mb.add(tube([Vector((-1.885, y, 0.7095)), Vector((-2.235, y, 0.7095))], 0.0042, 6), 'Vinyl_Graphite')
+        mb.add(tube([Vector((0.0365, y, -0.092)), Vector((0.0365, y, 0.092))], 0.0042, 6), 'Vinyl_Graphite', back)
     objs = [mb.build(root, sharp=50, inside=0.03)]
 
     mb = MB('Upholstery_Helm')
@@ -1086,10 +1095,11 @@ def build_rails_and_hardware(root):
     for side in (1, -1):
         grab = [Vector((-2.30, side * 0.52, 0.885)), Vector((-2.31, side * 0.54, 0.99)), Vector((-2.40, side * 0.60, 1.02)), Vector((-2.49, side * 0.66, 0.99)), Vector((-2.50, side * 0.68, 0.885))]
         rails.add(tube(resample(catmull(grab, 30), 14), 0.011, 6), 'Stainless')
-    for k in range(3):
-        rails.add(tube([Vector((-2.74 + k * 0.004, -0.52, 0.43 + k * 0.012)), Vector((-2.74 + k * 0.004, -0.76, 0.43 + k * 0.012))], 0.009, 6), 'Stainless')
-    for yy in (-0.52, -0.76):
-        rails.add(tube([Vector((-2.745, yy, 0.43)), Vector((-2.70, yy, 0.47))], 0.009, 6), 'Stainless')
+    # Boarding ladder folded flat on the starboard swim platform: two stiles and three rungs.
+    for yy in (-0.55, -0.73):
+        rails.add(tube([Vector((-2.585, yy, SWIM_TOP + 0.013)), Vector((-2.765, yy, SWIM_TOP + 0.013))], 0.008, 6), 'Stainless')
+    for xx in (-2.61, -2.675, -2.74):
+        rails.add(tube([Vector((xx, -0.55, SWIM_TOP + 0.014)), Vector((xx, -0.73, SWIM_TOP + 0.014))], 0.0075, 6), 'Stainless')
     r_obj = rails.build(root, sharp=50)
 
     hw = MB('Hardware')
@@ -1131,12 +1141,41 @@ def build_rails_and_hardware(root):
     nav.add(cylinder(0.03, 0.02, 12), 'Stainless', Matrix.Translation((-2.40, 0.84, 0.885)))
     n_obj = nav.build(root, sharp=50)
 
-    plat = MB('SwimPlatform')
-    for side in (1, -1):
-        plat.add(rbox(0.30, 0.43, 0.10, 0.03, 3), 'Gelcoat_White', trs((-2.64, side * 0.645, 0.35)))
-        plat.add(rbox(0.25, 0.37, 0.006, 0.015, 1), 'NonSkid', trs((-2.65, side * 0.645, 0.402)))
-    p_obj = plat.build(root, sharp=40, uv_scale={'NonSkid': 6.25})
+    p_obj = build_swim_platform(root)
     return [r_obj, h_obj, n_obj, p_obj]
+
+
+SWIM_TOP = 0.415
+
+
+def build_swim_platform(root):
+    """Molded swim platforms either side of the outboard: hull extensions, not bolt-on boxes.
+
+    The whole platform sits in the white topside band: its underside leaves the transom right on the navy paint line
+    and rises slightly aft, so in profile it reads as the topside continuing aft. The outer face runs flush with the
+    hull side at the transom, then tapers in plan to a rounded outboard-aft corner; the forward end is buried in the
+    transom so there is no visible joint gap.
+    """
+    plat = MB('SwimPlatform')
+    x_in = rake_x(X0, SWIM_TOP) + 0.05
+    z_paint = 0.318  # just above the navy panel's top edge at the transom
+    prof = [(x_in, SWIM_TOP), (-2.79, SWIM_TOP), (-2.80, SWIM_TOP - 0.03), (-2.79, z_paint + 0.022), (-2.66, z_paint + 0.008),
+            (rake_x(X0, z_paint) - 0.002, z_paint), (x_in, z_paint)]
+    y_out = hull_y_at(X0, 0.36) - 0.003
+    for side in (1, -1):
+        g = prism(prof, 0.43, y_out, r=0.014, seg=2)
+        xt = rake_x(X0, 0.36)
+        for i, (x, y, z) in enumerate(g.v):
+            if y > 0.6:
+                # Plan taper aft of the transom, rounding the outboard-aft corner.
+                aft = max(0.0, xt - x)
+                y -= 0.08 * aft + 0.035 * smooth(-2.70, -2.80, x) ** 1.5
+            g.v[i] = (x, y * side, z)
+        if side < 0:
+            g.f = [tuple(reversed(f)) for f in g.f]
+        plat.add(g, 'Gelcoat_White')
+        plat.add(rbox(0.19, 0.30, 0.006, 0.02, 1), 'NonSkid', trs((-2.662, side * 0.625, SWIM_TOP + 0.002)))
+    return plat.build(root, sharp=40, uv_scale={'NonSkid': 6.25})
 
 
 # ----------------------------------------------------------------------------------------- outboard
@@ -1149,10 +1188,10 @@ def build_outboard(root):
     mount = MB('Outboard_Mount')
     tx = rake_x(X0, 0.64)
     for s in (-1, 1):
-        mount.add(rbox(0.20, 0.03, 0.34, 0.012, 2), 'Engine_Dark', trs((tx - 0.075, s * 0.14, 0.52)))
+        mount.add(rbox(0.20, 0.03, 0.34, 0.012, 2), 'Rubber_Black', trs((tx - 0.075, s * 0.14, 0.52)))
         mount.add(cylinder(0.022, 0.012, 12), 'Stainless', trs((tx + 0.006, s * 0.14, 0.44), (0, math.pi / 2, 0)))
-    mount.add(rbox(0.07, 0.34, 0.05, 0.015, 2), 'Engine_Dark', trs((tx - 0.02, 0, 0.675)))
-    mount.add(tube([Vector((PIVOT.x, -0.19, PIVOT.z)), Vector((PIVOT.x, 0.19, PIVOT.z))], 0.028, 14), 'Engine_Dark')
+    mount.add(rbox(0.07, 0.34, 0.05, 0.015, 2), 'Rubber_Black', trs((tx - 0.02, 0, 0.675)))
+    mount.add(tube([Vector((PIVOT.x, -0.19, PIVOT.z)), Vector((PIVOT.x, 0.19, PIVOT.z))], 0.028, 14), 'Rubber_Black')
     mount.add(cylinder(0.034, 0.015, 14), 'Stainless', trs((PIVOT.x, 0.19, PIVOT.z), (-math.pi / 2, 0, 0)))
     mount.add(cylinder(0.034, 0.015, 14), 'Stainless', trs((PIVOT.x, -0.19, PIVOT.z), (math.pi / 2, 0, 0)))
     mount_obj = mount.build(root, sharp=45)
@@ -1204,16 +1243,23 @@ def build_outboard(root):
         eng.add(rbox(0.34, 0.012, 0.012, 0.005, 1), 'Stainless', trs((-0.30, s * 0.236, 0.40)))
     eng.add(tube([Vector((-0.64, -0.08, 0.30)), Vector((-0.70, -0.07, 0.33)), Vector((-0.70, 0.07, 0.33)), Vector((-0.64, 0.08, 0.30))], 0.014, 8), 'Engine_Dark')
     eng.add(rbox(0.02, 0.10, 0.03, 0.008, 1), 'Engine_Dark', Matrix.Translation((0.04, 0, 0.13)))
-    # Anti-ventilation plate with its sacrificial anode fin.
-    eng.add(prism([(-0.02, -0.6), (-0.44, -0.6), (-0.44, -0.588), (-0.02, -0.588)], -0.155, 0.155, r=0.005, seg=1), 'Cowl_Graphite')
-    eng.add(rbox(0.12, 0.012, 0.03, 0.005, 1), 'Engine_Dark', Matrix.Translation((-0.37, 0, -0.62)))
-    # Gearcase strut and torpedo (nose forward), water intake grilles, skeg.
+    # Anti-ventilation plate: a slim tapered planform (narrow nose, widest over the gearcase, rounded trailing edge),
+    # lofted as a 10 mm plate with softened edges; plus its small sacrificial anode fin.
+    half = [(0.012, 0.0), (0.004, 0.034), (-0.035, 0.078), (-0.11, 0.108), (-0.22, 0.106), (-0.31, 0.088), (-0.365, 0.062), (-0.385, 0.03)]
+    plan = [Vector(p) for p in half] + [Vector((-0.39, 0.0))] + [Vector((x, -y)) for (x, y) in reversed(half[1:])]
+    plan = fillet_polygon(plan, 0.02, 2)
+    if sum(plan[i].x * plan[i - 1].y - plan[i - 1].x * plan[i].y for i in range(len(plan))) < 0:
+        plan.reverse()
+    plate = [[Vector((p.x, p.y, -0.594 + dz)) for p in (inset_polygon(plan, e) if e else plan)] for dz, e in ((-0.005, 0.003), (0.0, 0.0), (0.005, 0.003))]
+    eng.add(loft(plate), 'Cowl_Graphite')
+    eng.add(rbox(0.09, 0.010, 0.026, 0.004, 1), 'Engine_Dark', Matrix.Translation((-0.31, 0, -0.612)))
+    # Gearcase strut (leading edge raked forward toward the torpedo) and torpedo (nose forward), skeg.
     strut = []
     for k in range(4):
         f = k / 3
         z = lerp(-0.80, -0.59, f)
-        chord = lerp(0.30, 0.28, f)
-        strut.append([Vector((0.0 + x, y, z)) for (x, y) in foil(chord, 0.26, 22)])
+        chord = lerp(0.29, 0.27, f)
+        strut.append([Vector((lerp(0.012, -0.01, f) + x, y, z)) for (x, y) in foil(chord, 0.21, 22)])
     eng.add(loft(strut), 'Cowl_Graphite')
     torp = []
     for x, r in ((0.045, 0.004), (0.035, 0.035), (0.015, 0.055), (-0.03, 0.066), (-0.12, 0.068), (-0.24, 0.066), (-0.32, 0.058), (-0.36, 0.05)):
@@ -1307,10 +1353,14 @@ def build_wheel(root):
 
 def build_throttle(root):
     p = throttle_pivot()
+    # Compact side-mount lever: hub on the control box's inboard face, short arm and a small inboard grip.
+    # One material keeps the animated lever to a single draw call.
     mb = MB('Throttle')
-    mb.add(cylinder(0.018, 0.03, 14), 'Stainless', trs((0, 0.015, 0), (math.pi / 2, 0, 0)))
-    mb.add(tube([Vector((0, 0, 0)), Vector((0.0, 0.005, 0.10)), Vector((-0.012, 0.02, 0.15))], 0.009, 8), 'Stainless')
-    mb.add(tube([Vector((-0.012, 0.0, 0.155)), Vector((-0.012, 0.10, 0.155))], 0.016, 12), 'Rubber_Black')
+    mb.add(cylinder(0.017, 0.022, 14), 'Rubber_Black', trs((0, 0.056, 0), (math.pi / 2, 0, 0)))
+    arm = resample(catmull([Vector((0, 0.046, 0)), Vector((0.0, 0.048, 0.05)), Vector((-0.008, 0.052, 0.088))], 10), 6)
+    mb.add(tube(arm, 0.0065, 8, radius_fn=lambda s: 1.0 - 0.2 * s), 'Rubber_Black')
+    mb.add(tube([Vector((-0.008, 0.042, 0.092)), Vector((-0.008, 0.108, 0.092))], 0.0105, 10,
+                radius_fn=lambda s: 0.85 + 0.15 * math.sin(math.pi * s)), 'Rubber_Black')
     obj = mb.build(root, sharp=50)
     obj.location = tuple(p)
     return obj

@@ -725,3 +725,120 @@ Against the research budget (section 9, Normal):
 - **No baked AO or texture atlas yet.** Cockpit contact darkening relies on the engine's shadows. The UV strategy for the bake is in the brief (section 9).
 - **The crew figures are the old primitives by design.** People are out of scope. They now sit or stand on the new furniture; the skipper stands at the helm.
 - **No LOD1.** The player boat is always near the camera. LOD1 for moored and traffic craft is specified but not built.
+
+## Hero boat polish pass (2026-09-30, branch `feat/bayliner-v20-hero-boat`)
+
+An independent visual review of `b761a55` raised nine findings. All changes are in the generator (`tools/blender/generate_v20_hero.py`); the `.blend`, GLB, Blender QA renders and `docs/screenshots/hero-boat-*.jpg` were regenerated from it. No runtime code changed. `src/sim`, physics, controls, camera, water, HUD, missions and people are untouched.
+
+| # | Finding | Fix |
+|---|---|---|
+| 1 | Rectangular white "side fenders" look permanently attached | The generator never had fender nodes. The slabs in the profile and perspective renders were the free-standing rounded-box swim steps sticking out past the transom corners at mid-topside height. They are removed and replaced by molded platforms (see 5). `heroBoatAsset.test.ts` now fails on any `fender`/`bumper` node, and the brief's acceptance check lists it. |
+| 2 | Spray rails and chine too thick, slab-like forward | Rails 26 → 16 mm wide, downturn 4 → 2.5 mm, fading to a 1.5 mm vestige between t = 0.70 and 0.86. The chine flat is 55 → 40 mm, downturn 10 → 8 mm, narrowing to 30% toward the stem. Both stay part of the hull stations, so nothing penetrates or floats. |
+| 3 | Gelcoat, vinyl and deck too close under bright light | Gelcoat 0.76 → 0.68 albedo, roughness 0.24 → 0.32, clearcoat 1.0 → 0.6. Vinyl_Ivory warmer (0.62, 0.565, 0.45). NonSkid greyer and rougher (0.45, roughness 0.76). |
+| 4 | Aft bench reads as modular sofa blocks | One continuous seat cushion and one backrest pad across the beam, with two graphite welt seams marking three places, continuous front piping and top bolster. Seat anchors unchanged (the bench carries none). |
+| 5 | Transom and swim steps look pasted on | Swim platforms extruded from a profile: the underside leaves the transom on the navy paint line, so the platform continues the white topside band; the outer face is flush with the hull side, then tapers to a rounded outboard-aft corner; the forward end is buried in the transom. The ladder lies flat on the starboard platform. Aft-deck corner blocks follow the raked transom just inside it, with 45 mm fillets. Hull and envelope unchanged. |
+| 6 | Throttle lever too tall and coarse | Control box 0.16 × 0.085 × 0.17 → 0.13 × 0.07 × 0.11 m with the stainless cap removed. The lever is a hub on the box's inboard face, a 9 cm arm and a 21 mm grip (was a 15 cm shaft and a 32 mm grip), in one material. The `Throttle` node, pivot position and identity rest rotation are unchanged. |
+| 7 | Gauges look like overexposed white discs | Black housing cup, dark glass face recessed about 5 mm under a slim stainless torus bezel, and a stainless needle. Display_Glass is rougher (0.08 → 0.28, spec 0.25), and the display housing is black. Still 15 materials. |
+| 8 | Oversized rectangular anti-ventilation plate | 0.42 × 0.31 m slab → lofted 10 mm plate, 0.40 m long and 0.216 m at its widest, with a narrow nose at the strut and a rounded trailing edge. Smaller anode fin; the gearcase strut is thinner (26% → 21%) with a forward-raked leading edge. `EnginePivot` and `Prop` transforms unchanged. |
+| 9 | Preserve the strengths | Hull loft, open bow, windshield, outboard cowl, paint lines, axes and the original, logo-free design are unchanged. |
+
+**Draw calls.** Two changes cut the scene delta against the procedural boat from +7 to +3 with no visible difference:
+- The outboard bracket moved from Engine_Dark to Rubber_Black, which was already in the static merge. Their values differ by 0.004 albedo and 0.1 roughness.
+- The animated lever became one material.
+
+The hero now has 21 in-game meshes against the procedural boat's 22.
+
+### Blender generation (Blender 5.2.1 LTS, `sh tools/blender/build-hero-boat.sh --render`)
+
+- **Deterministic:** two runs gave byte-identical GLBs (SHA-1 `22cc8b76afbf95c0d3beefd9b8ceb15ad20fecaa`).
+- **Render time:** 85 s for the 8 Cycles views at 96 samples.
+
+**Iterations, judged on the renders:**
+- **First pass:** 29,749 triangles. The lofted-over-bevelled plate and the gauges cost 1,040 triangles, so the plate became a three-ring loft and the gauge rings were lowered to 16 × 4.
+- **Swim platform, first try:** it straddled the navy line, and in profile it read as a white hook on the navy. It was moved into the white band.
+- **Gauge faces:** still caught the studio sky, so Display_Glass roughness went from 0.20 to 0.28.
+
+**Final asset** (`node scripts/glb-inspect.mjs`):
+
+| Property | Before (`b761a55`) | After |
+|---|---|---|
+| Size | 1,087,916 bytes | **1,084,860 bytes** |
+| Triangles | 29,357 | **29,261** |
+| Primitives | 55 | **54** |
+| Materials | 15 | **15** |
+| Hull bounds | X ±2.600, Y −0.280 to 1.120, Z ±1.030 | unchanged |
+| Whole boat | Z ±1.047 | Z ±1.046 |
+| EnginePivot / Prop | (−2.66, 0.62, 0) / (−3.06, −0.18, 0) | unchanged |
+| Wheel / Throttle | (−0.299, 0.933, 0.53) / (−0.02, 1.13, 0.76) | unchanged |
+
+Triangles per node:
+
+| Node | Triangles |
+|---|---|
+| Hull | 5,377 |
+| Deck | 2,800 |
+| Outboard | 2,760 |
+| Upholstery_Bow | 2,228 |
+| Rails | 2,144 |
+| RubRail | 1,840 |
+| Hardware | 1,692 |
+| Console_Companion | 1,138 |
+| Windshield | 1,126 |
+| Helm_Dash | 1,084 |
+| Wheel | 976 |
+| Prop | 906 |
+| Console_Helm | 794 |
+| Upholstery_Helm | 740 |
+| Upholstery_Companion | 740 |
+| Upholstery_AftBench | 596 |
+| Outboard_Mount | 588 |
+| NavLights | 548 |
+| AftDeck | 520 |
+| SwimPlatform | 472 |
+| Throttle | 192 |
+
+### In-game QA (`scripts/qa-hero.mjs`, production preview, 1600×900, Chrome and WebKit identical)
+
+| Scene | Procedural calls | Hero calls | Hero triangles |
+|---|---|---|---|
+| dock (chase) | 91 | 94 | 1,099,639 |
+| dock orbit | 171 | 174 | 1,116,287 |
+| open water | 114 | 117 | 939,527 |
+| beach | 94 | 97 | 904,947 |
+| helm | 79 | 82 | 1,093,851 |
+
+- **Hero readiness:** 76 ms in Chrome and 66 ms in WebKit.
+- **Console errors:** none.
+- **Blocked GLB:** status `failed` and the procedural boat is shown. The only error is Chrome's `net::ERR_FAILED` for the blocked request.
+
+**Near-white check.** Same pose, old GLB against new GLB, share of boat pixels with every channel ≥ 235:
+
+| View | Before | After |
+|---|---|---|
+| dock chase | 9.47% | 0.66% |
+| side orbit | 0.91% | 0.52% |
+| open water | 0.87% | 0.74% |
+
+Clipped pixels (≥ 245) stay at 0.01 to 0.05%.
+
+**Performance** (`scripts/qa-perf.mjs normal`, headed Chrome, DPR 2, M5):
+- Hero: 120 fps, p95 9.6 to 9.9 ms, worst scene 180 draw calls and 1,112,239 triangles (basin).
+- Procedural: 177 draw calls in the same scene.
+
+### Verification (Node v22.23.1)
+
+| Check | Result |
+|---|---|
+| `npm run lint` | clean |
+| `npm run typecheck` | clean |
+| `npm test` | `Test Files 18 passed (18)`, `Tests 145 passed (145)` |
+| `npm run build` | OK |
+| `npx playwright test tests/e2e/hero-boat.spec.ts` | `6 passed`: 3 on Chrome and 3 on WebKit |
+| `git diff -- src/sim` | empty |
+
+### Remaining visual limitations
+
+- At game distance, the ivory and gelcoat separation is subtle in full sun. It is clear in the Blender views and at the helm. A baked-AO or atlas pass would add contact shading between cushions and molded parts.
+- The anti-ventilation plate is a flat loft with softened edges, not a cast part with a draft.
+- The bow eye is still a simple half-torus.
+- The gauges carry no dial graphics, because textures are out of scope for this material-only slice.

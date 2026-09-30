@@ -35,6 +35,8 @@ describe('V20-inspired hero boat GLB', () => {
       expect(Math.abs(q[3]), `${name} rest rotation`).toBeCloseTo(1, 6);
     }
     expect(r.isDescendant('Prop', 'EnginePivot')).toBe(true);
+    // Fenders belong to the dock environment, never to the always-moving hero boat.
+    expect(r.nodes.filter((n) => /fender|bumper/i.test(n.name))).toEqual([]);
   });
 
   it('keeps the gameplay envelope, the waterline and the boat axes (+X bow, +Y up, +Z starboard)', () => {

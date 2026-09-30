@@ -97,7 +97,7 @@ The player boat is an original, logo-free, **V20-inspired** open-bow outboard. I
 
 - **Source of truth:** `tools/blender/generate_v20_hero.py`, a deterministic Blender 5.2 LTS script with no imported meshes or images. It writes:
   - the editable `assets-src/blender/v20-inspired-hero.blend`
-  - the runtime `public/assets/boats/v20-inspired-hero.glb` (29,357 triangles, 15 PBR materials, 1.09 MB, no Draco, Meshopt or KTX2, no external URIs)
+  - the runtime `public/assets/boats/v20-inspired-hero.glb` (29,261 triangles, 15 PBR materials, 1.08 MB, no Draco, Meshopt or KTX2, no external URIs)
 - **Regenerate:**
 
   ```bash

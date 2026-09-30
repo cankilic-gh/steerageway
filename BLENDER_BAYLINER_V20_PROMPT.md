@@ -19,7 +19,7 @@ Outboard steering/trim pivot at (-2.66, 0, 0.62); propeller hub center 0.40 m af
 
 Silhouette: modern family bowrider. Raked, slightly convex stem; gently rising sheer that kicks up in the
 last third; a full bow with the beam carried forward (wide open-bow seating); wide transom with integrated
-swim steps each side of a single outboard. White topsides, a sweeping navy side panel rising toward the bow,
+molded swim platforms each side of a single outboard (no hull-side fenders: fenders belong to the dock). White topsides, a sweeping navy side panel rising toward the bow,
 a white boot stripe on the waterline and dark matte bottom paint below it.
 
 Hull: smooth lofted deep-V (about 19 deg deadrise at the transom, finer forward), two spray rails per side
@@ -28,15 +28,16 @@ Deck: gunwale cap with a rolled outer edge, black rub rail with a stainless inse
 cockpit and bow soles, cambered foredeck with an anchor-locker hatch outline.
 Layout: U-shaped open-bow lounges with backrests and a point backrest, walk-through between a starboard helm
 console and a port companion console (glovebox, grab handle), a framed wrap-around windshield with a
-walk-through center panel, helm and companion bucket seats on molded pedestals, a full-width aft bench with a
-pleated backrest in front of the splash well.
-Helm: dark dash panel on a slanted dash face, multifunction display, two gauges with stainless bezels, switch
-row, tilt-helm shroud, 3-spoke stainless wheel with a black rim, side-mount throttle binnacle and lever.
+walk-through center panel, helm and companion bucket seats on molded pedestals, one continuous full-width aft
+bench (seams and piping mark three places) in front of the splash well.
+Helm: dark dash panel on a slanted dash face, multifunction display, two gauges with dark glass faces recessed
+in slim stainless bezel rings, switch row, tilt-helm shroud, 3-spoke stainless wheel with a black rim, compact
+side-mount control box with a short lever and small grip.
 Hardware: stainless bow rails with stanchions and base flanges, 6 horn cleats, bow eye, cup holders,
 stern grab handles, folding boarding ladder, bow combination light (red to port, green to starboard) and an
 all-round white stern light on a pole.
 Outboard: original sculpted cowl (no text), satin split-line band, lower pan, foil-section midsection,
-anti-ventilation plate with anode, gearcase torpedo, skeg, three-blade stainless propeller with pitch,
+slim tapered anti-ventilation plate with anode, gearcase torpedo, skeg, three-blade stainless propeller with pitch,
 skew and cup. The transom bracket and tilt tube are static; everything else steers and trims.
 
 Constraints: 30k triangles or fewer, 16 materials or fewer, Principled BSDF only, no image textures except a
@@ -74,9 +75,9 @@ What is **not** claimed: the real V20's length, beam, deadrise, weight, capacity
 - **Chine:**
   - Half-beam is 80% of the sheer half-beam aft, narrowing to 68% at the bow.
   - Height is a fraction of the section depth: 0.237 aft, rising to 0.457 at the bow. That gives about 19° deadrise at the transom and a fine entry forward.
-  - The reverse chine flat is 55 mm wide with a 10 mm downturn and a crisp edge.
+  - The reverse chine flat is 40 mm wide with an 8 mm downturn and a crisp edge, narrowing to 30% of that toward the stem (t 0.70 to 0.95).
 - **Bottom:** the V from keel to chine gets a slight convexity (10 mm bulge) so it catches light smoothly.
-- **Spray rails:** two per side, at 34% and 68% of the bottom girth. Each is a 26 mm step with a 4 mm downturned underside. Rail widths scale down toward the stem.
+- **Spray rails:** two per side, at 34% and 68% of the bottom girth. Each is a slim, conformal 16 mm step with a 2.5 mm downturned underside, built into the hull stations (no separate strips, so no penetration or loose ends). Width and downturn fade to a 1.5 mm vestige between t = 0.70 and 0.86, well before the stem.
 - **Topsides:** a quadratic curve from the chine to the sheer. The flare control moves from 0.45 aft (nearly straight) to 0.20 forward (concave flare near the gunwale).
 - **Transom:**
   - Planar, with 5° rake applied only at the aft end.
@@ -107,7 +108,7 @@ What is **not** claimed: the real V20's length, beam, deadrise, weight, capacity
   - Leans inboard at the sides and gets lower toward the ends.
   - Black frame top rail, base gasket, end posts and walk-through mullions, plus a stainless grab rail on the starboard top.
 - **Upholstery:** Vinyl_Ivory main with Vinyl_Graphite accents, all rounded.
-  - Aft bench: three seat cushions with front piping, and a three-pleat backrest per section with a graphite top band.
+  - Aft bench: one continuous seat cushion and one continuous backrest pad across the beam. Two shallow graphite welt seams on the seat and backrest mark three places; continuous front piping and a continuous graphite top bolster.
   - Bucket seats: molded pedestal, seat pan with piping, graphite side bolsters and backrest shell, ivory pleats.
 - **Interior clamp rule:** every interior mesh is clamped inside the liner (`|y| ≤ liner(x, z) + 3 cm`), so nothing pokes through the flared topsides.
 
@@ -117,7 +118,8 @@ What is **not** claimed: the real V20's length, beam, deadrise, weight, capacity
   - Dash panel, display, two gauges and a switch strip sit on the dash face. The face is defined by `DASH_A = (−0.19, 0.76)` and `DASH_B = (−0.07, 1.04)` in (x, z).
   - The wheel shaft is tilted 1.02 rad from vertical, pointing aft and up. The wheel center is at (−0.30, −0.53, 0.93).
   - Wheel: R = 0.175 m black rim and three dished stainless spokes.
-  - Side-mount binnacle and lever at (−0.02, −0.76, 1.13).
+  - Gauges: black housing cup, dark glass face (Display_Glass) recessed about 5 mm below a slim stainless bezel ring (torus, 36 mm radius), and a stainless needle. The display has a black housing.
+  - Side-mount control box (0.13 × 0.07 × 0.11 m, Rubber_Black) with the lever pivot at (−0.02, −0.76, 1.13). The lever is a hub on the box's inboard face, a 9 cm arm and a 66 mm × 21 mm inboard grip, all Rubber_Black (one draw call).
 - **Rails:**
   - 25 mm stainless bow rails running from a center bow stanchion aft along each gunwale to about X = 0.87.
   - Two intermediate stanchions per side, with base flanges. The rail ends turn down into flanges on the cap.
@@ -126,7 +128,9 @@ What is **not** claimed: the real V20's length, beam, deadrise, weight, capacity
   - Bow eye on the stem at Z = 0.28.
   - 4 cup holders in the cap.
   - Stern grab handles.
-  - Starboard folding boarding ladder.
+  - Starboard boarding ladder folded flat on the swim platform (two stiles, three rungs).
+- **Swim platforms:** molded hull extensions either side of the notch, not bolt-on boxes. Top at 0.415 m, 0.25 m aft of the transom. The underside leaves the transom right on the navy paint line (0.318 m) and rises slightly aft, so the whole platform sits in the white topside band. The outer face is flush with the hull side at the transom and tapers in plan to a rounded outboard-aft corner; the forward end is buried in the transom. Inset non-skid pad on top.
+- **Aft deck corner blocks:** extruded from a side profile whose aft face follows the raked transom just inside it, with 45 mm fillets.
 - **Nav lights (emissive):**
   - Bow combination light on the stem head: red lens to port, green lens to starboard.
   - All-round white light on a 0.9 m pole at the port aft corner.
@@ -141,7 +145,7 @@ What is **not** claimed: the real V20's length, beam, deadrise, weight, capacity
 ## 6. Outboard (original design, no text)
 
 - **Static part (`Outboard_Mount`):**
-  - Clamp bracket plates straddling the transom notch, with a top clamp bar.
+  - Clamp bracket plates straddling the transom notch, with a top clamp bar (Rubber_Black, so the static merge needs no Engine_Dark draw).
   - Tilt tube across the pivot, with stainless end caps.
 - **`EnginePivot` subtree:** everything here steers about the pivot's Y axis and trims about its Z axis (three.js axes).
 
@@ -152,8 +156,8 @@ What is **not** claimed: the real V20's length, beam, deadrise, weight, capacity
   | Lower pan (chaps) | Superellipse loft | Engine_Dark |
   | Split-line band | Satin band loft | Stainless |
   | Upper cowl | Superellipse loft (n = 3.4) with a tapered crown, 0.68 m long and 0.47 m wide; recessed rear intakes, side trim strips, rear handle, front latch | Cowl_Graphite (clearcoat metallic paint) |
-  | Anti-ventilation plate | 0.42 × 0.31 m plate at pivot Z −0.60, with an anode fin | Cowl_Graphite, Engine_Dark |
-  | Gearcase | Foil strut and torpedo (nose forward, 68 mm radius) | Cowl_Graphite |
+  | Anti-ventilation plate | 10 mm lofted plate at pivot Z −0.594 with softened edges. Tapered planform: narrow nose at the strut, widest (0.216 m) over the gearcase, 0.40 m long, rounded trailing edge. Small anode fin below | Cowl_Graphite, Engine_Dark |
+  | Gearcase | Foil strut (21% thick, leading edge raked forward toward the torpedo) and torpedo (nose forward, 68 mm radius) | Cowl_Graphite |
   | Skeg | Foil, down to pivot Z −0.975 | Cowl_Graphite |
 
 - **`Prop`** (child of EnginePivot, shaft along local X):
@@ -165,22 +169,23 @@ What is **not** claimed: the real V20's length, beam, deadrise, weight, capacity
 
 | Material | Base color (linear) | Rough | Metal | Extras | Sided |
 |---|---|---|---|---|---|
-| Gelcoat_White | 0.76, 0.765, 0.75 | 0.24 | 0 | coat 1.0 / 0.07 | double |
+| Gelcoat_White | 0.675, 0.685, 0.685 | 0.32 | 0 | coat 0.6 / 0.10 | double |
 | Hull_Navy | 0.018, 0.034, 0.075 | 0.22 | 0 | coat 1.0 / 0.06 | double |
 | Bottom_Paint | 0.030, 0.034, 0.042 | 0.78 | 0 | spec 0.3 | double |
-| NonSkid | 0.56, 0.56, 0.535 | 0.62 | 0 | generated diamond normal map (256 px, 8 × 8 cells, 0.16 m tile) | double |
-| Vinyl_Ivory | 0.66, 0.63, 0.56 | 0.46 | 0 | sheen 0.25 | single |
+| NonSkid | 0.45, 0.455, 0.452 | 0.76 | 0 | generated diamond normal map (256 px, 8 × 8 cells, 0.16 m tile) | double |
+| Vinyl_Ivory | 0.62, 0.565, 0.45 | 0.52 | 0 | sheen 0.3 | single |
 | Vinyl_Graphite | 0.035, 0.040, 0.048 | 0.52 | 0 | sheen 0.25 | single |
 | Stainless | 0.80, 0.81, 0.82 | 0.20 | 1 | | single |
 | Rubber_Black | 0.016, 0.017, 0.019 | 0.55 | 0 | spec 0.4 | single |
 | Glass_Smoke | 0.10, 0.13, 0.14, alpha 0.32 | 0.03 | 0 | BLEND | double |
-| Display_Glass | 0.006, 0.008, 0.011 | 0.08 | 0 | faint blue emission | single |
+| Display_Glass | 0.006, 0.008, 0.011 | 0.28 | 0 | spec 0.25, faint blue emission 0.8 | single |
 | Cowl_Graphite | 0.045, 0.048, 0.052 | 0.32 | 0.55 | coat 1.0 / 0.05 | single |
 | Engine_Dark | 0.020, 0.021, 0.023 | 0.45 | 0 | | single |
 | NavLight_Red / _Green / _White | lens colors | 0.2 | 0 | emission strength 6 / 6 / 5 | single |
 
 Rules:
-- Gelcoat never goes above 0.8 albedo: pure white clips under the game's sun.
+- Gelcoat never goes above 0.7 albedo, with a moderate clearcoat: pure white clips under the game's sun.
+- Separation under bright light: warm ivory vinyl (blue/red 0.73) and a greyer, rougher non-skid (about 2/3 of the gelcoat albedo) stay distinct from the neutral gelcoat without looking dirty or beige.
 - No procedural shader nodes; the only image is the generated non-skid normal map.
 - Emission strengths above 1 export as `KHR_materials_emissive_strength`.
 
@@ -225,7 +230,7 @@ V20Hero (empty, origin)
 
 ## 10. LODs
 
-- **LOD0** (this asset): 29,357 triangles. The player boat is always within about 30 m of the camera, so there is no runtime LOD.
+- **LOD0** (this asset): 29,261 triangles. The player boat is always within about 30 m of the camera, so there is no runtime LOD.
 - **Low quality** preset: the procedural boat (about 14.8k triangles). The GLB is not requested.
 - **Planned LOD1** (about 5k) for moored and traffic craft reuse:
   - Decimate the hull stations to 24 and drop the rail/insert sweeps, cup holders and switch strip.
@@ -248,7 +253,7 @@ Result:
 |---|---|
 | Buffers and images | Embedded; no external URIs |
 | Extensions used | `KHR_materials_clearcoat`, `KHR_materials_emissive_strength`, `KHR_materials_specular`, `KHR_materials_sheen` (all read by GLTFLoader into `MeshPhysicalMaterial`) |
-| Size | 1,087,916 bytes |
+| Size | 1,084,860 bytes |
 
 ## 12. QA cameras and lighting
 
@@ -267,21 +272,21 @@ Result:
   | `07-coastal-waterline` | Coastal waterline |
   | `08-chase-view` | Game-like chase camera |
 
-- **Check before accepting:** no floating parts, nothing through the hull, clean paint lines, no blown-out gelcoat, readable helm, correct red/green sides, and the prop and lower unit below the plate.
+- **Check before accepting:** no floating parts, nothing through the hull, no fenders or slab add-ons on the hull sides, clean paint lines, no blown-out gelcoat, readable helm, correct red/green sides, and the prop and lower unit below the plate.
 
 ## 13. Budgets (verified values for this asset)
 
 | Budget | Limit | This asset |
 |---|---|---|
-| LOD0 triangles | ≤ 30,000 | **29,357** |
+| LOD0 triangles | ≤ 30,000 | **29,261** |
 | Materials | ≤ 16 | **15** |
-| GLB size | ≤ 1.5 MB | **1.09 MB** |
+| GLB size | ≤ 1.5 MB | **1.08 MB** |
 | Images | tiny, generated | 1 PNG, 4.9 kB |
-| In-game boat meshes after static merge | ≤ procedural (22) + 1 | **23** |
-| Scene draw calls, worst QA scene (Normal) | ≤ 220 | **184** (+7 vs procedural) |
+| In-game boat meshes after static merge | ≤ procedural (22) + 1 | **21** |
+| Scene draw calls, worst QA scene (Normal) | ≤ 220 | **180** (+3 vs procedural) |
 | Scene triangles, worst QA scene | ≤ 1.5 M | **1.11 M** |
 
-The research's "≤ 6 draws" target assumes a texture atlas. This material-only slice instead holds the line at the procedural boat's draw count plus 7 in the whole scene (the shadow pass included).
+The research's "≤ 6 draws" target assumes a texture atlas. This material-only slice instead holds the line at the procedural boat's draw count plus 3 in the whole scene (the shadow pass included). The polish pass cut the delta from +7 by moving the outboard bracket from Engine_Dark to the visually identical Rubber_Black (no static Engine_Dark mesh) and making the animated lever one material.
 
 ## 14. Banned content
 
