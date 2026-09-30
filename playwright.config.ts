@@ -4,7 +4,8 @@ import { defineConfig, devices } from '@playwright/test';
  * Browser smoke tests run against a fresh production build (vite preview) on a dedicated port.
  * The server is never reused: a stale preview left running on another port once masked new code.
  * Local projects: Google Chrome (installed channel, GPU via ANGLE Metal) and WebKit (Safari's engine).
- * On CI (no installed Chrome, no GPU): Playwright's bundled Chromium with SwiftShader software WebGL 2.
+ * On CI (no installed Chrome, no GPU): Playwright's bundled Chromium with SwiftShader software WebGL 2,
+ * used by `npm run e2e:ci` to run only the @ci-smoke test.
  */
 const ci = Boolean(process.env['CI']);
 

@@ -34,7 +34,7 @@
     "test:watch": "vitest",
     "e2e": "playwright test",
     "verify": "npm run lint && npm run typecheck && npm test && npm run build && npm run e2e",
-    "e2e:ci": "playwright test --grep-invert @realtime"
+    "e2e:ci": "playwright test --grep @ci-smoke"
   },
   "engines": {
     "node": "^22.13.0 || ^24.0.0 || >=26.0.0"

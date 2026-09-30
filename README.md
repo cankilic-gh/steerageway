@@ -54,8 +54,8 @@ Before the first `npm run e2e` on a new machine, install the browser engines onc
 **Continuous integration** (`.github/workflows/ci.yml`, Node from `.nvmrc`, currently 22) runs on pushes to `main`, on pull requests and on demand:
 
 1. `quality`: `npm ci`, lint, typecheck, unit tests and the production build.
-2. `browser-smoke`: the Playwright suite in Playwright's bundled Chromium with SwiftShader software WebGL 2 (`npm run e2e:ci`), because hosted runners have neither Google Chrome nor a GPU.
-   - The four tests tagged `@realtime` are skipped there: the full autopilot mission, the no-wake failure path, keyboard controls and pause/resume. They need GPU frame rates for real-time sim progress, so they run in the local Chrome and WebKit suite instead.
+2. `browser-smoke`: one test, tagged `@ci-smoke` (`tests/e2e/ci-smoke.spec.ts`), in Playwright's bundled Chromium with SwiftShader software WebGL 2 (`npm run e2e:ci`), because hosted runners have neither Google Chrome nor a GPU. It checks that the production build boots with a live WebGL 2 canvas and the right title, starts Free Cruise, and shows the quiet cruise HUD with no mission structure (no briefing, objective panel or timer). It uses one page load and no long simulation.
+   - CI does **not** run the full browser suite. On CPU-rendered WebGL the suite's repeated page loads and simulation steps exceed per-test time budgets and can lose browser contexts, so the full suite (including the `@ci-smoke` test) runs locally on Chrome and WebKit with `npm run e2e` or `npm run verify`.
 
 Optional QA helpers write their output to `artifacts/`, which is not committed. They require `npm run preview` running on port 4173:
 

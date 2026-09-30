@@ -31,7 +31,7 @@ jobs:
       - run: npm run build
 
   browser-smoke:
-    name: Browser smoke (bundled Chromium, software WebGL)
+    name: Browser smoke (one @ci-smoke test, bundled Chromium, software WebGL)
     needs: quality
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -43,8 +43,10 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx playwright install --with-deps chromium
-      # CI=true selects the bundled Chromium project with SwiftShader (playwright.config.ts). Tests tagged
-      # @realtime need GPU frame rates for real-time sim progress and run locally on Chrome and WebKit instead.
+      # CI=true selects the bundled Chromium project with SwiftShader software WebGL 2 (playwright.config.ts).
+      # e2e:ci runs only the single @ci-smoke test (tests/e2e/ci-smoke.spec.ts): production build boot, WebGL 2
+      # canvas and title, start Free Cruise, quiet HUD with no mission structure. The full browser suite needs
+      # a GPU (CPU WebGL on hosted runners exceeds per-test budgets) and runs locally on Chrome and WebKit.
       - run: npm run e2e:ci
       - if: failure()
         uses: actions/upload-artifact@v4
