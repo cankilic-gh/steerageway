@@ -1,0 +1,14 @@
+# Keeps local-only files out of a `vercel` CLI upload from this folder (Git deployments only see tracked files).
+node_modules
+dist
+test-results
+playwright-report
+artifacts
+CLAUDE_*.log
+CLAUDE_*.jsonl
+CLAUDE_TASK.md
+PRODUCTION_MISSION.md
+.claude
+.env
+.env.*
+.DS_Store
