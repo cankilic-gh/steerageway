@@ -63,7 +63,7 @@ export class UI {
   private selVariant: VariantId = 'V2';
   private selSeed = 1;
   private practice = false;
-  private selMode: GameMode = 'mission';
+  private selMode: GameMode = 'cruise';
   private hudRefs: Record<string, HTMLElement> = {};
   private lastHud = 0;
   private camLabelTimer = 0;
@@ -164,8 +164,8 @@ export class UI {
           <h1 class="brand" id="t-brand">Steerageway</h1>
           <p class="tagline">Skipper a 17 ft outboard around Kettle Cove. Read the wind, current and waves, respect the marks and the no-wake zone, and bring the boat home without a scratch.</p>
           <div class="modes" role="group" aria-label="Choose a mode">
-            <button class="mode" data-mode="mission" aria-pressed="${!cruise}"><span class="mname">Mission</span><span class="msum">Ten objectives from cast off to the fuel dock, scored, with a debrief.</span></button>
             <button class="mode" data-mode="cruise" aria-pressed="${cruise}"><span class="mname">Free Cruise</span><span class="msum">No objectives, timer or score. Roam the cove; beach or dock when you like.</span></button>
+            <button class="mode" data-mode="mission" aria-pressed="${!cruise}"><span class="mname">Mission</span><span class="msum">Ten objectives from cast off to the fuel dock, scored, with a debrief.</span></button>
           </div>
           <div class="profile">
             <div><span class="muted">Rank</span><b>${rank}</b></div>
@@ -176,7 +176,7 @@ export class UI {
           ${next ? `<div class="muted" style="font-size:.85em">${next.min - profile.reputation} reputation to ${next.name}: unlocks harder conditions.</div>` : ''}
           <div class="row" style="margin-top:6px">
             <button class="btn primary" data-act="start" style="min-width:190px">${cruise ? 'Start free cruise' : 'Start mission'}</button>
-            <button class="btn" data-act="help">How to play</button>
+            <button class="btn" data-act="help">Tutorial</button>
             <button class="btn" data-act="settings">Settings</button>
           </div>
           <p class="disclaimer"><b>Recreational education, not certification.</b> Steerageway is a game with simplified physics. It is not a boating safety course, is not NASBLA-approved, does not satisfy any state's boater education requirement, and is not for navigation. Real boats handle differently. Take an approved boating safety course before operating a boat.</p>
@@ -283,7 +283,7 @@ export class UI {
     const s = this.screens['help']!;
     s.className = 'screen dim';
     s.innerHTML = `<div class="panel dialog" role="dialog" aria-labelledby="h-title">
-      <h2 id="h-title">How to play</h2>
+      <h2 id="h-title">Tutorial</h2>
       <p class="muted">Steerageway rewards what real skippers do: go slow near others, read the forces before committing, and approach with the bow into the strongest force.</p>
       <h3>Controls</h3>${this.controlsTable()}
       <h3>Reading the water</h3>
@@ -644,7 +644,7 @@ export class UI {
         ${mode === 'cruise' ? '<button class="btn" data-act="tow">Tow back to Dock A</button>' : ''}
         <button class="btn" data-act="restart">${mode === 'cruise' ? 'Restart cruise (same conditions)' : 'Restart (same conditions)'}</button>
         <button class="btn" data-act="settings">Settings</button>
-        <button class="btn" data-act="help">How to play</button>
+        <button class="btn" data-act="help">Tutorial</button>
         <button class="btn" data-act="quit">Quit to title</button>
       </div></div>`;
     const on = (a: string, fn: () => void) =>

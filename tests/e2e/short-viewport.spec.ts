@@ -1,5 +1,5 @@
 import type { Locator, Page } from '@playwright/test';
-import { test, expect, gotoTitle, api } from './fixtures';
+import { test, expect, gotoTitle, api, isChrome } from './fixtures';
 
 /**
  * Regression: on a short desktop viewport, opening a panel must not scroll it past its heading.
@@ -68,6 +68,7 @@ const tabTo = async (page: Page, name: RegExp, maxTabs = 40): Promise<void> => {
 test('briefing opens at its heading on a short viewport and stays keyboard-operable', async ({ page, consoleErrors }) => {
   void consoleErrors;
   await gotoTitle(page);
+  await page.getByRole('button', { name: /^Mission/ }).click();
   await page.getByRole('button', { name: 'Start mission' }).click();
   const heading = page.getByRole('heading', { name: /Beach Drop, Breeze Home/ });
   await expectOpenedAtTop(page, 'briefing', '.dialog', heading);
@@ -108,14 +109,18 @@ test('result and debrief open at their headings on a short viewport and stay key
   await expect(page.locator('#hud')).toBeVisible();
 });
 
-test('how-to-play opens at its heading on a short viewport', async ({ page, consoleErrors }) => {
+test('Tutorial opens at its heading on a short viewport', async ({ page, consoleErrors }, info) => {
   void consoleErrors;
   await gotoTitle(page);
-  await page.getByRole('button', { name: 'How to play' }).click();
-  await expectOpenedAtTop(page, 'help', '.dialog', page.getByRole('heading', { name: 'How to play' }));
+  await page.waitForTimeout(800);
+  if (isChrome(info.project.name)) await page.screenshot({ path: 'artifacts/qa/19-title-short-viewport.png' });
+  await page.getByRole('button', { name: 'Tutorial', exact: true }).click();
+  await expectOpenedAtTop(page, 'help', '.dialog', page.getByRole('heading', { name: 'Tutorial', exact: true }));
+  if (isChrome(info.project.name)) await page.screenshot({ path: 'artifacts/qa/20-tutorial-short-viewport.png' });
   await tabTo(page, /^Back$/);
   await page.keyboard.press('Enter');
   await expect(page.locator('[data-screen="title"]')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Start free cruise', exact: true })).toBeInViewport({ ratio: 1 });
 });
 
 test('title with the mode choice opens at the top on a short viewport, in both modes', async ({ page, consoleErrors }) => {

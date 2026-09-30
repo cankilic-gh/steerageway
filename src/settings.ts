@@ -75,7 +75,7 @@ const prefersReducedMotion = (): boolean =>
 
 export const defaultSettings = (): Settings => ({
   coach: 'full',
-  cruiseHints: true,
+  cruiseHints: false,
   predictor: false,
   forceArrows: true,
   dockGuides: true,

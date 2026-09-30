@@ -3,6 +3,7 @@ import { test, expect, gotoTitle, describeGame, isChrome } from './fixtures';
 test('keyboard controls: lever holds position, neutral snap, wheel, cast off, and the boat moves', { tag: '@realtime' }, async ({ page, consoleErrors }, info) => {
   void consoleErrors;
   await gotoTitle(page);
+  await page.getByRole('button', { name: /^Mission/ }).click();
   await page.getByRole('button', { name: 'Start mission' }).click();
   await page.getByRole('button', { name: 'Go aboard' }).click();
   await expect(page.locator('#hud')).toBeVisible();

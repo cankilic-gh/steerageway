@@ -842,3 +842,37 @@ Clipped pixels (≥ 245) stay at 0.01 to 0.05%.
 - The anti-ventilation plate is a flat loft with softened edges, not a cast part with a draft.
 - The bow eye is still a simple half-torus.
 - The gauges carry no dial graphics, because textures are out of scope for this material-only slice.
+
+## Cruise-first startup, optional Tutorial (2026-09-30, branch `feat/bayliner-v20-hero-boat`)
+
+**Change.** A fresh load selects Free Cruise, and its card now comes before Mission. The primary button reads "Start free cruise" and goes aboard without a briefing. Free Cruise training hints are off by default (`defaultSettings().cruiseHints === false`). A saved setting still overrides the default through the existing `loadSettings` merge. On the title and pause screens, "How to play" is now "Tutorial". It opens the same help dialog, now headed "Tutorial", with the same content. It never opens by itself. Mission is still one click away and keeps its briefing. Nothing in `src/sim`, `src/render`, `src/input`, `src/audio` or `src/app.ts` changed.
+
+**TDD.** Tests were written first.
+- New: `tests/unit/settings.test.ts` (default, empty storage, persisted override).
+- New in `start-flow.spec.ts`: fresh-title priority, default start, and Tutorial content with Back.
+- New in `pause-settings.spec.ts`: pause Tutorial returns to the pause menu.
+- Specs that assumed Mission was the default now select it explicitly: controls, hero-boat, pause-settings, short-viewport, start-flow and cruise.
+- `cruise.spec.ts` now checks that hints are hidden by default. Its pause test turns hints on and checks that the choice survives a reload.
+
+| Run | Result |
+|---|---|
+| RED `vitest run tests/unit/settings.test.ts` | 2 failed, 1 passed (`expected true to be false`) |
+| RED focused E2E (4 specs, Chrome) | 7 failed, 11 passed. Failures: Free Cruise not pressed, mode order `['mission','cruise']`, no "Tutorial" button (click timeouts), hints checkbox checked |
+| GREEN `vitest run tests/unit/settings.test.ts` | 3 passed |
+| GREEN focused E2E (Chrome + WebKit) | 36 passed |
+| `npm run lint` / `npm run typecheck` | clean |
+| `npm test` | 19 files, 148 tests passed |
+| `npm run build` | OK |
+| `npm run e2e` | 50 passed |
+
+**Visual and accessibility QA** (production preview, Chrome):
+- Checked at 1920×1080, 1600×900 and 1280×633. There were no console errors.
+- The mode group reads Free Cruise [pressed], then Mission. Focus starts on "Start free cruise".
+- The Tutorial dialog is `aria-labelledby="h-title"` ("Tutorial") and focus lands on its heading. It opens at the top on the short viewport.
+- Screenshots:
+  - `artifacts/qa/01-title.png` and `18-tutorial.png`
+  - `artifacts/qa/19-title-short-viewport.png` and `20-tutorial-short-viewport.png`
+  - `artifacts/qa/21-title-*.png` and `22-tutorial-*.png`
+- `docs/screenshots/title.jpg` was refreshed at 1280×720.
+
+**Known gap (unchanged).** Back from the Tutorial to the title does not move focus back to a title control. Pause → Tutorial → Back does focus Resume.

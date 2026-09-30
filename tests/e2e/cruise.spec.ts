@@ -26,8 +26,8 @@ const startCruise = async (page: Page): Promise<void> => {
 test('Free Cruise is a first-class mode with a quiet HUD and no mission structure', async ({ page, consoleErrors }, info) => {
   void consoleErrors;
   await gotoTitle(page);
-  await expect(page.getByRole('button', { name: /^Mission/ })).toHaveAttribute('aria-pressed', 'true');
-  await page.getByRole('button', { name: /^Free Cruise/ }).click();
+  await expect(page.getByRole('button', { name: /^Free Cruise/ })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('button', { name: /^Mission/ })).toHaveAttribute('aria-pressed', 'false');
   await expect(page.getByRole('button', { name: 'Start free cruise' })).toBeVisible();
   await expect(page.getByText('Practice (no reputation change)')).toBeHidden();
   await page.getByRole('button', { name: 'Start free cruise' }).click();
@@ -45,8 +45,9 @@ test('Free Cruise is a first-class mode with a quiet HUD and no mission structur
   await expect(page.locator('.sounder')).toBeVisible();
   await expect(page.locator('.compass-wrap')).toBeVisible();
   await expect(page.locator('.lever')).toBeVisible();
-  // Optional training hint (on by default).
-  await expect(page.locator('#prompts').getByText(/Free cruise: no objectives or timer/)).toBeVisible();
+  // Optional training hints are off by default.
+  await page.waitForTimeout(1500);
+  await expect(page.locator('#prompts').getByText(/Free cruise: no objectives or timer/)).toBeHidden();
 
   const s = await state(page);
   expect(s.mode).toBe('cruise');
@@ -112,7 +113,7 @@ test('Free Cruise: tie up voluntarily at the fuel dock and cast off again', asyn
   await expect.poll(async () => (await state(page)).moored).toBe(false);
 });
 
-test('Free Cruise: pause offers a tow, settings turn hints off, and Quit returns to the title', async ({ page, consoleErrors }) => {
+test('Free Cruise: pause offers a tow, settings turn hints on, and Quit returns to the title', async ({ page, consoleErrors }) => {
   void consoleErrors;
   await startCruise(page);
   await page.keyboard.press('Escape');
@@ -120,27 +121,34 @@ test('Free Cruise: pause offers a tow, settings turn hints off, and Quit returns
   await expect(page.getByRole('button', { name: 'Tow back to Dock A' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Restart cruise (same conditions)' })).toBeVisible();
   await page.getByRole('button', { name: 'Settings' }).click();
-  await page.getByLabel(/Training hints in Free Cruise/).uncheck();
+  await expect(page.getByLabel(/Training hints in Free Cruise/)).not.toBeChecked();
+  await page.getByLabel(/Training hints in Free Cruise/).check();
   await page.getByRole('button', { name: 'Done' }).click();
   await expect(page.getByRole('heading', { name: 'Paused' })).toBeVisible();
   await page.getByRole('button', { name: 'Restart cruise (same conditions)' }).click();
-  await page.waitForTimeout(1500);
-  await expect(page.locator('#prompts').getByText(/Free cruise: no objectives or timer/)).toBeHidden();
+  await expect(page.locator('#prompts').getByText(/Free cruise: no objectives or timer/)).toBeVisible();
   expect((await state(page)).mode).toBe('cruise');
   await page.keyboard.press('Escape');
   await page.getByRole('button', { name: 'Quit to title' }).click();
   await expect(page.locator('[data-screen="title"]')).toBeVisible();
   await expect(page.getByRole('button', { name: /^Free Cruise/ })).toHaveAttribute('aria-pressed', 'true');
-  // Restore the default for later tests.
+  // The saved preference outlives the new default.
+  await page.reload();
+  await expect(page.locator('[data-screen="title"]')).toBeVisible();
   await page.getByRole('button', { name: 'Settings' }).click();
-  await page.getByLabel(/Training hints in Free Cruise/).check();
+  await expect(page.getByLabel(/Training hints in Free Cruise/)).toBeChecked();
+  // Restore the default for later tests.
+  await page.getByLabel(/Training hints in Free Cruise/).uncheck();
   await page.getByRole('button', { name: 'Done' }).click();
 });
 
-test('mission mode is still selected by default and keeps its briefing', async ({ page, consoleErrors }) => {
+test('mission mode is still selectable and keeps its briefing', async ({ page, consoleErrors }) => {
   void consoleErrors;
   await gotoTitle(page);
+  await page.getByRole('button', { name: /^Mission/ }).click();
+  await expect(page.getByRole('button', { name: /^Mission/ })).toHaveAttribute('aria-pressed', 'true');
   await page.getByRole('button', { name: 'Start mission' }).click();
+  await expect(page.locator('[data-screen="briefing"]')).toBeVisible();
   await expect(page.locator('#b-title')).toHaveText('Beach Drop, Breeze Home');
   await page.getByRole('button', { name: 'Go aboard' }).click();
   await expect(page.locator('.hud-obj')).toBeVisible();

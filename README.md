@@ -12,7 +12,7 @@ Or pick **Free Cruise** on the title screen: the same boat, water and weather wi
 
 | | |
 |---|---|
-| ![Title screen with Mission and Free Cruise](docs/screenshots/title.jpg) | ![Running the marked channel out to sea](docs/screenshots/channel.jpg) |
+| ![Title screen with Free Cruise and Mission](docs/screenshots/title.jpg) | ![Running the marked channel out to sea](docs/screenshots/channel.jpg) |
 | ![Clear shallows with moving caustics at the beach](docs/screenshots/water-shallows-caustics.jpg) | ![Debrief with chart replay and key moments](docs/screenshots/debrief.jpg) |
 
 More in [`docs/screenshots/`](docs/screenshots/), including the [water-optics before/current/final comparison](docs/screenshots/water-optics-comparison.jpg).
@@ -143,16 +143,16 @@ The player boat is an original, logo-free, **V20-inspired** open-bow outboard. I
 
 ## What is implemented
 
-**Free Cruise** (title screen: Mission / Free Cruise)
+**Free Cruise** (the default on the title screen; Mission is one click away)
 - No objectives, countdown, score, reputation change or debrief, and no forced route or beach/dock sequence. The run ends only when you quit.
 - Pick any of the 8 conditions and a seed. Locked conditions are open in cruise. Gusts continue for 3 hours. The first 20 minutes match the mission gusts for the same code, and the sea breeze still arrives on its timeline.
 - Physical hazards stay:
   - Contact damage, grounding and prop strikes.
   - A breached hull, hard grounding or destroyed prop strands the boat. Press E (or use the pause menu) to be towed back to Dock A and repaired.
-- Rule breaches never end the run. The no-wake zone, swim area and chart edge give optional training hints: on by default, off in Settings ("Training hints in Free Cruise").
+- Rule breaches never end the run. The no-wake zone, swim area and chart edge give optional training hints: off by default, on in Settings ("Training hints in Free Cruise"). A saved preference is kept.
 - Dock voluntarily: stop alongside the fuel dock or Dock A (within 1 m, roughly parallel, stopped for 3 s) and press E to tie up; press E again to cast off. Beach anywhere on sand; E pushes off.
 - A quiet HUD: the instruments, plus one status line (stranded, tied up, alongside, on the sand, engine off). The objective panel, score and checklist are hidden.
-- Pause menu: resume, tow back to Dock A, restart cruise (same conditions), settings, help, quit to title.
+- Pause menu: resume, tow back to Dock A, restart cruise (same conditions), settings, tutorial, quit to title.
 
 **Mission and game structure**
 - Title screen with rank, reputation, runs and clean runs. Condition picker for 8 variants (Calm Morning, Beach Drop, Flood Tide, Wind Off the Dock, Crosswind Channel, Afternoon Chop, Traffic, Off Station). Variants unlock by rank; locked ones are playable as practice.
@@ -167,7 +167,7 @@ The player boat is an original, logo-free, **V20-inspired** open-bow outboard. I
   - Up to three key moments with rule-generated causal explanations, for example how much of a dock contact was wind, current or the boat's own way.
   - A concept card on direction-dependent marks.
   - Retry with the same conditions or a new seed.
-- Pause menu (resume, restart with the same conditions, settings, help, quit). The game auto-pauses when the tab is hidden.
+- Pause menu (resume, restart with the same conditions, settings, tutorial, quit). The game auto-pauses when the tab is hidden.
 
 **Simulation** (deterministic, fixed 60 Hz, independent of rendering)
 - 3-DOF (surge, sway, yaw) outboard boat model.

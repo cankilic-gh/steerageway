@@ -18,6 +18,7 @@ interface BoatProbe {
 const probe = (page: Page): Promise<BoatProbe> => api<BoatProbe>(page, 'boat');
 
 const goAboard = async (page: Page): Promise<void> => {
+  await page.getByRole('button', { name: /^Mission/ }).click();
   await page.getByRole('button', { name: 'Start mission' }).click();
   await page.getByRole('button', { name: 'Go aboard' }).click();
   await expect(page.locator('#hud')).toBeVisible();
