@@ -936,3 +936,30 @@ The added triangles are mostly meadow blades within reach of the shore. Over ope
 - The wake is a shallow-water approximation. Its V angle follows the capped wave speed, not the 19.5° Kelvin angle, and at idle it spreads as rings.
 - Docks and bulkheads are not obstacles in the wake window.
 - Meadow blades reach about 56 m from the camera. Beyond that the meadow is the shaded terrain.
+
+## Nature detail pass: branching trees, whorled pines, shrubs and arching grass (2026-10-01, branch `feat/nature-detail`)
+
+**Change.** The user asked for the cove's nature to match the detail level of the revised Flareway aircraft. Only `src/render/vegetation.ts` changed: same exports, same instancing and placement in `props.ts`, and nothing in `src/sim`.
+
+- **Broadleaf.** The trunk bends gently and carries four branches. The canopy is a large crown cluster, one cluster on each branch end, four around the top and two low ones. The larger clusters use a finer subdivision. Normals stay bent away from the crown centre, and the world-space leaf noise is unchanged.
+- **Pitch pine.** A tapered trunk with eight whorled tiers, each a drooping two-ring needle skirt with a jagged rim.
+- **Shrubs.** Six soft leaf clusters around a dense core.
+- **Marsh and dune grass.** Clumps of twelve tapered blades in three segments that arch outward, shaded dark at the base and light at the tip.
+
+**Tests.** No behaviour changed, so no new tests.
+
+| Run | Result |
+|---|---|
+| `npm run lint` / `npm run typecheck` | clean |
+| `npm test` | 21 files, 157 tests passed |
+| `npm run build` | OK |
+| `npm run e2e` | 52 passed (Chrome + WebKit) |
+
+**Performance** (headless Chrome, Apple M5, 1280×720):
+
+| Pose | fps | p95 | triangles |
+|---|---|---|---|
+| Underway on the west shore | 114 | 10.4 ms | 3.30 M |
+| Marina | 120 | 9.6 ms | 3.61 M |
+
+Frame rate is unchanged from the previous pass. `docs/screenshots/north-shore.jpg` was refreshed.

@@ -1,4 +1,4 @@
-import { BufferAttribute, BufferGeometry, ConeGeometry, CylinderGeometry, IcosahedronGeometry, Vector3, type MeshStandardMaterial } from 'three';
+import { BufferAttribute, BufferGeometry, CylinderGeometry, IcosahedronGeometry, Quaternion, Vector3, type MeshStandardMaterial } from 'three';
 import { mergeGeometries, mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 /**
@@ -89,78 +89,98 @@ const lobe = (r: number, x: number, y: number, z: number, seed: number, detail =
   return g;
 };
 
-/** Broadleaf canopy: seven overlapping lobes around a trunk top, about 7 m tall at scale 1. */
+/** Where the four main branches end; the canopy clusters sit on these, the trunk geometry reaches them. */
+const BRANCH_ENDS: [number, number, number][] = [
+  [1.55, 4.75, 0.45],
+  [-0.5, 5.05, 1.45],
+  [-1.5, 4.6, -0.6],
+  [0.45, 5.25, -1.35],
+];
+
+/** Broadleaf canopy: a large crown lobe plus clusters on the branch ends and around the top, ~7 m tall. */
 export const makeCanopyGeometry = (): BufferGeometry => {
-  const spec: [number, number, number, number][] = [
-    [0, 4.7, 0, 2.0],
-    [1.35, 4.15, 0.5, 1.45],
-    [-1.2, 4.2, -0.55, 1.55],
-    [0.4, 5.75, -0.45, 1.35],
-    [-0.55, 4.0, 1.25, 1.3],
-    [0.7, 3.75, -1.2, 1.25],
-    [-0.3, 5.3, 0.6, 1.2],
-  ];
-  const center = new Vector3(0, 4.6, 0);
-  const merged = mergeGeometries(spec.map(([x, y, z, r], i) => lobe(r, x, y, z, 11 + i * 31, i === 0 ? 2 : 1)), false);
-  bendNormals(merged, center, 0.65, 1.15);
+  const spec: [number, number, number, number, number][] = [[0.1, 5.2, 0, 1.85, 2]];
+  BRANCH_ENDS.forEach(([x, y, z], i) => spec.push([x * 1.12, y + 0.35, z * 1.12, 1.25 + 0.2 * hash(i + 3), 2]));
+  for (let k = 0; k < 4; k++) {
+    const a = k * 1.57 + 0.8;
+    spec.push([Math.cos(a) * 1.0, 6.2 + 0.3 * hash(k + 5), Math.sin(a) * 1.0, 1.0 + 0.2 * hash(k + 6), 1]);
+  }
+  spec.push([0.6, 4.15, -0.5, 1.1, 1], [-0.7, 4.35, 0.6, 1.05, 1]);
+  const center = new Vector3(0, 5.1, 0);
+  const merged = mergeGeometries(spec.map(([x, y, z, r, d], i) => lobe(r, x, y, z, 11 + i * 31, d)), false);
+  bendNormals(merged, center, 0.62, 1.15);
   return setColors(merged, (p, i) => {
-    const out = Math.min(p.clone().sub(center).length() / 2.6, 1.15);
-    return 0.42 + 0.42 * smooth(0.45, 1.05, out) + 0.22 * smooth(3.2, 6.6, p.y) + (hash(i) - 0.5) * 0.1;
+    const out = Math.min(p.clone().sub(center).length() / 2.7, 1.15);
+    return 0.4 + 0.44 * smooth(0.45, 1.05, out) + 0.22 * smooth(3.4, 6.8, p.y) + (hash(i) - 0.5) * 0.1;
   });
 };
 
 export const makeTrunkGeometry = (): BufferGeometry => {
-  const t = indexed(new CylinderGeometry(0.13, 0.27, 3.8, 9, 3));
-  t.translate(0, 1.9, 0);
-  const branches = [
-    [0.8, 0.5, 3.1, 0],
-    [-0.75, -0.4, 3.3, 2.1],
-    [0.6, 0.0, 3.6, 4.0],
-  ].map(([tilt, , y, yaw]) => {
-    const b = indexed(new CylinderGeometry(0.05, 0.1, 1.7, 6));
-    b.translate(0, 0.85, 0);
-    b.rotateZ(tilt!);
-    b.rotateY(yaw!);
-    b.translate(0, y!, 0);
-    return b;
-  });
-  const g = mergeGeometries([t, ...branches], false);
+  const t = indexed(new CylinderGeometry(0.15, 0.3, 3.6, 9, 4));
+  // A gentle bend so trunks are never perfectly straight.
+  const tp = t.getAttribute('position');
+  for (let i = 0; i < tp.count; i++) {
+    const y = tp.getY(i) + 1.8;
+    tp.setX(i, tp.getX(i) + 0.12 * Math.sin((y / 3.6) * Math.PI));
+  }
+  t.translate(0, 1.8, 0);
+  const parts = [t];
+  for (const [ex, ey, ez] of BRANCH_ENDS) {
+    const from = new Vector3(0.1, 3.0, 0);
+    const to = new Vector3(ex, ey, ez);
+    const len = from.distanceTo(to);
+    const b = indexed(new CylinderGeometry(0.05, 0.12, len, 6));
+    b.translate(0, len / 2, 0);
+    const dir = to.clone().sub(from).normalize();
+    b.applyQuaternion(new Quaternion().setFromUnitVectors(new Vector3(0, 1, 0), dir));
+    b.translate(from.x, from.y, from.z);
+    parts.push(b);
+  }
+  const g = mergeGeometries(parts, false);
   g.computeVertexNormals();
   return setColors(g, (p) => 0.55 + 0.45 * smooth(0, 3.5, p.y));
 };
 
-/** Pitch pine: seven tiers of drooping, jagged needle cones on a bare lower trunk. */
+/** Pitch pine: eight whorled tiers, each a drooping two-ring needle skirt with a jagged rim. */
 export const makePineGeometry = (): BufferGeometry => {
   const parts: BufferGeometry[] = [];
-  const trunk = indexed(new CylinderGeometry(0.09, 0.2, 3.4, 8));
-  trunk.translate(0, 1.7, 0);
+  const trunk = indexed(new CylinderGeometry(0.05, 0.22, 7.2, 8));
+  trunk.translate(0, 3.5, 0);
   trunk.computeVertexNormals();
   parts.push(setColors(trunk, (p) => 0.3 + 0.12 * smooth(0, 3, p.y)));
-  const tiers = 7;
+  const tiers = 8;
+  const spokes = 16;
   for (let t = 0; t < tiers; t++) {
     const f = t / (tiers - 1);
-    const y = 1.9 + f * 4.3;
-    const r = 1.85 * (1 - f * 0.78);
-    const h = 1.5 - f * 0.55;
-    const c = indexed(new ConeGeometry(r, h, 16, 3));
-    const pos = c.getAttribute('position');
-    const p = new Vector3();
-    for (let i = 0; i < pos.count; i++) {
-      p.fromBufferAttribute(pos, i);
-      const ring = Math.hypot(p.x, p.z) / r;
-      if (ring > 0.01) {
-        const a = Math.atan2(p.z, p.x);
-        // Jagged needle clumps around the rim and a drooping outer edge.
-        const jag = 0.8 + 0.2 * Math.cos(a * 8 + t * 1.7) + (noise3(Math.cos(a) * 3, t, Math.sin(a) * 3, 400) - 0.5) * 0.3;
-        p.x *= jag;
-        p.z *= jag;
-        p.y -= ring * ring * 0.35 * h;
+    const y = 1.8 + f * 5.2;
+    const r = 2.0 * (1 - f * 0.8);
+    const h = 1.2 - f * 0.45;
+    const pos: number[] = [0, y + h, 0];
+    for (const [ring, frac, droop] of [[0, 0.55, 0.25], [1, 1.0, 0.55]] as const) {
+      for (let j = 0; j < spokes; j++) {
+        const a = (j / spokes) * Math.PI * 2 + t * 0.4;
+        const jag = ring === 1 ? (j % 2 === 0 ? 1 : 0.84) : 1;
+        const rr = r * frac * jag * (0.92 + 0.16 * hash(j + t * 31 + ring * 7));
+        pos.push(Math.cos(a) * rr, y + h * (1 - frac) - droop * h * frac, Math.sin(a) * rr);
       }
-      pos.setXYZ(i, p.x, p.y + y + h / 2, p.z);
     }
-    c.computeVertexNormals();
-    bendNormals(c, new Vector3(0, y + h * 0.1, 0), 0.5, 1.8);
-    parts.push(setColors(c, (q, i) => {
+    pos.push(0, y + 0.1 * h, 0);
+    const idx: number[] = [];
+    const inner = 1;
+    const outer = 1 + spokes;
+    const bottom = 1 + 2 * spokes;
+    for (let j = 0; j < spokes; j++) {
+      const j2 = (j + 1) % spokes;
+      idx.push(0, inner + j2, inner + j);
+      idx.push(inner + j, inner + j2, outer + j2, inner + j, outer + j2, outer + j);
+      idx.push(bottom, outer + j, outer + j2);
+    }
+    const g = new BufferGeometry();
+    g.setAttribute('position', new BufferAttribute(new Float32Array(pos), 3));
+    g.setIndex(idx);
+    g.computeVertexNormals();
+    bendNormals(g, new Vector3(0, y + h * 0.1, 0), 0.5, 1.8);
+    parts.push(setColors(g, (q, i) => {
       const ring = Math.hypot(q.x, q.z) / r;
       return 0.38 + 0.45 * smooth(0.15, 1.0, ring) + 0.12 * f + (hash(i + t * 1000) - 0.5) * 0.12;
     }));
@@ -168,44 +188,68 @@ export const makePineGeometry = (): BufferGeometry => {
   return mergeGeometries(parts, false);
 };
 
-/** A clump of thin grass blades leaning outward (double-sided material). */
-export const makeGrassClumpGeometry = (blades = 9, height = 1.0): BufferGeometry => {
+/** A clump of tapered, arching grass blades in three segments (double-sided material). */
+export const makeGrassClumpGeometry = (blades = 12, height = 1.0): BufferGeometry => {
   const pos: number[] = [];
   const col: number[] = [];
+  const idx: number[] = [];
   for (let i = 0; i < blades; i++) {
     const a = (i / blades) * Math.PI * 2 + hash(i) * 0.6;
-    const lean = 0.15 + hash(i + 50) * 0.35;
-    const h = height * (0.6 + hash(i + 90) * 0.5);
-    const w = 0.035;
-    const bx = Math.cos(a) * 0.08;
-    const bz = Math.sin(a) * 0.08;
-    const tx = bx + Math.cos(a) * lean * h;
-    const tz = bz + Math.sin(a) * lean * h;
-    const px = -Math.sin(a) * w;
-    const pz = Math.cos(a) * w;
-    pos.push(bx - px, 0, bz - pz, bx + px, 0, bz + pz, tx, h, tz);
-    col.push(0.45, 0.45, 0.45, 0.45, 0.45, 0.45, 1.1, 1.1, 1.05);
+    const lean = 0.18 + hash(i + 50) * 0.4;
+    const h = height * (0.55 + hash(i + 90) * 0.55);
+    const w = 0.03 + hash(i + 120) * 0.015;
+    const dx = Math.cos(a);
+    const dz = Math.sin(a);
+    const px = -dz;
+    const pz = dx;
+    const base = pos.length / 3;
+    const segs = 3;
+    for (let k = 0; k <= segs; k++) {
+      const t = k / segs;
+      const out = 0.06 + lean * h * t * t;
+      const y = h * (t - 0.18 * lean * t * t);
+      const half = w * (1 - t * 0.85);
+      const cx = dx * out;
+      const cz = dz * out;
+      if (k < segs) {
+        pos.push(cx - px * half, y, cz - pz * half, cx + px * half, y, cz + pz * half);
+        const c = 0.42 + 0.68 * t;
+        col.push(c, c, c * 0.97, c, c, c * 0.97);
+      } else {
+        pos.push(cx, y, cz);
+        col.push(1.1, 1.1, 1.05);
+      }
+    }
+    for (let k = 0; k < segs - 1; k++) {
+      const v = base + k * 2;
+      idx.push(v, v + 1, v + 2, v + 1, v + 3, v + 2);
+    }
+    const last = base + (segs - 1) * 2;
+    idx.push(last, last + 1, last + 2);
   }
   const g = new BufferGeometry();
   g.setAttribute('position', new BufferAttribute(new Float32Array(pos), 3));
   g.setAttribute('color', new BufferAttribute(new Float32Array(col), 3));
+  g.setIndex(idx);
   g.computeVertexNormals();
-  return g;
+  return g.toNonIndexed();
 };
 
-/** A low shrub: four soft lobes. */
+/** A low shrub: six soft leaf clusters around a dense core. */
 export const makeShrubGeometry = (): BufferGeometry => {
   const spec: [number, number, number, number][] = [
-    [0, 0.5, 0, 0.9],
-    [0.62, 0.42, 0.3, 0.7],
-    [-0.5, 0.45, -0.32, 0.75],
-    [0.1, 0.4, -0.6, 0.6],
+    [0, 0.55, 0, 0.85],
+    [0.62, 0.42, 0.3, 0.62],
+    [-0.5, 0.45, -0.32, 0.66],
+    [0.1, 0.4, -0.62, 0.55],
+    [-0.35, 0.38, 0.55, 0.52],
+    [0.25, 0.85, 0.15, 0.5],
   ];
   const merged = mergeGeometries(spec.map(([x, y, z, r], i) => lobe(r, x, y, z, 200 + i * 17, 1)), false);
-  merged.scale(1, 0.72, 1);
+  merged.scale(1, 0.78, 1);
   merged.computeVertexNormals();
-  bendNormals(merged, new Vector3(0, 0.2, 0), 0.6, 1.4);
-  return setColors(merged, (p, i) => 0.45 + 0.55 * smooth(0, 0.9, p.y) + (hash(i) - 0.5) * 0.1);
+  bendNormals(merged, new Vector3(0, 0.25, 0), 0.6, 1.4);
+  return setColors(merged, (p, i) => 0.42 + 0.58 * smooth(0, 0.95, p.y) + (hash(i) - 0.5) * 0.12);
 };
 
 /** A fractured boulder: random cutting planes over a noisy sphere, like weathered granite. */
