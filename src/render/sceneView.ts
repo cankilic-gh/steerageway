@@ -40,6 +40,8 @@ import { buildWorldProps, type WorldProps } from './props';
 import { createCraft, createPlayerBoat, type BoatVisual, type PlayerBoat } from './boatModel';
 import { applyBoatVisual, loadHeroBoat } from './heroBoat';
 import { Spray, WakeTrail } from './effects';
+import { WakeSim } from './wakeSim';
+import { GrassField } from './grassField';
 import { Assists } from './assists';
 import { CameraRig } from './cameraRig';
 
@@ -117,6 +119,10 @@ export class SceneView {
   private readonly heroEnabled: boolean;
   private disposed = false;
   private readonly wake: WakeTrail;
+  /** Boat-local shallow-water wake (null without float render targets); Low quality keeps the ribbon trail. */
+  private readonly wakeSim: WakeSim | null;
+  /** Camera-following meadow blades: a wide field plus a dense near layer (hidden on Low). */
+  private readonly grass: GrassField[];
   private readonly spray = new Spray();
   readonly assists = new Assists();
   private readonly traffic = new Map<string, Group>();
@@ -210,9 +216,16 @@ export class SceneView {
 
     this.noise = makeNoiseTexture(256);
     this.field = makeStaticFieldTexture(getStaticFields());
-    this.water = new Water(this.field, makeCurrentTexture({ mode: 'ebb', scale: 1 }), this.noise);
+    this.wakeSim = WakeSim.supported(this.renderer) ? new WakeSim(this.renderer, this.field) : null;
+    const caustic = makeCausticTexture();
+    this.water = new Water(this.field, makeCurrentTexture({ mode: 'ebb', scale: 1 }), this.noise, { wake: this.wakeSim?.uniforms, lace: caustic });
     this.scene.add(this.water.mesh);
-    this.scene.add(buildTerrain(quality, { noise: this.noise, caustic: makeCausticTexture(), time: this.terrainTime, optics: this.terrainOptics }));
+    this.scene.add(buildTerrain(quality, { noise: this.noise, caustic, time: this.terrainTime, optics: this.terrainOptics, wake: this.wakeSim?.uniforms }));
+    this.grass = [new GrassField(quality === 'high' ? 120000 : 55000), new GrassField(quality === 'high' ? 40000 : 20000, 36, 11, 17)];
+    for (const g of this.grass) {
+      g.enabled = quality !== 'low';
+      this.scene.add(g.mesh);
+    }
     this.props = buildWorldProps(WORLD.gates, quality);
     this.scene.add(this.props.root);
     const r4 = this.props.marksById['R4'];
@@ -312,6 +325,12 @@ export class SceneView {
     });
   }
 
+  /** QA hook: whether the simulated wake is drawing, and where its window is centred (sim metres). */
+  wakeProbe(): { active: boolean; centre: [number, number] | null } {
+    const active = this.wakeSim !== null && this.wakeSim.uniforms.uWakeXf.value.w > 0.5;
+    return { active, centre: this.wakeSim ? this.wakeSim.centre : null };
+  }
+
   /** Test and QA hook: force a sky regardless of the condition (null returns to the condition's sky). */
   setSkyOverride(kind: SkyKind | null, sim?: GameSim): void {
     this.skyOverride = kind;
@@ -389,6 +408,7 @@ export class SceneView {
     this.pixelRatio = Math.min(this.pixelCap, window.devicePixelRatio || 1);
     this.renderer.shadowMap.enabled = q !== 'low';
     this.sun.castShadow = q !== 'low';
+    for (const g of this.grass) g.enabled = q !== 'low';
     const samples = msaaSamples(q);
     if (this.hdr.samples !== samples) {
       this.hdr.samples = samples;
@@ -437,6 +457,7 @@ export class SceneView {
     for (const g of this.props.beachGuests) g.visible = false;
     for (const g of this.boat.guests) g.visible = true;
     this.wake.reset();
+    this.wakeSim?.reset(sim.boat.x, sim.boat.y);
     this.rig.reset();
     this.att.heave = 0;
     this.att.pitch = 0;
@@ -502,6 +523,12 @@ export class SceneView {
 
     // Wake and spray.
     if (!paused) {
+      const simWake = this.wakeSim !== null && this.quality !== 'low';
+      this.wake.mesh.visible = !simWake;
+      if (this.wakeSim) {
+        this.wakeSim.uniforms.uWakeXf.value.w = simWake ? 1 : 0;
+        if (simWake) this.wakeSim.update(dt, { x, y, heading, vx: b.vx, vy: b.vy, wakeIndex: b.forces.wakeIndex, waterKn, propTurning: spin !== 0 });
+      }
       this.wake.update(env, t, x, y, heading, speed, b.forces.wakeIndex);
       if (sim.stats.slams > this.lastSlamCount) {
         this.lastSlamCount = sim.stats.slams;
@@ -610,6 +637,7 @@ export class SceneView {
     const wbs = Math.hypot(wb.x, wb.y);
     if (wbs > 0.01) this.windDir.set(wb.x / wbs, wb.y / wbs);
     this.water.update(env, this.camera, settings.depthEmphasis, this.windDir, wbs);
+    for (const g of this.grass) g.update(this.camera.position, t);
     this.terrainTime.value = t;
 
     this.renderer.info.reset();
@@ -651,6 +679,7 @@ export class SceneView {
 
   dispose(): void {
     this.disposed = true;
+    this.wakeSim?.dispose();
     this.renderer.dispose();
   }
 }

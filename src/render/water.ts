@@ -1,8 +1,9 @@
-import { BufferAttribute, BufferGeometry, Color, Mesh, MeshPhysicalMaterial, ShaderChunk, Vector2, Vector3, Vector4, type Camera, type IUniform, type Texture } from 'three';
+import { BufferAttribute, BufferGeometry, Color, DataTexture, FloatType, Mesh, MeshPhysicalMaterial, RGBAFormat, ShaderChunk, Vector2, Vector3, Vector4, type Camera, type IUniform, type Texture } from 'three';
 import type { Environment, Gust } from '../sim/environment';
 import { WAVES_PER_PHASE, GUST_REF } from '../sim/environment';
 import { KN, compassToYaw } from '../sim/units';
 import type { FieldTexture } from './fieldTextures';
+import { WAKE_CELL, WAKE_N, type WakeSim } from './wakeSim';
 import { BASE_GLINT_SHARPNESS, F0_WATER, MICRO_WAVES, TURBIDITY, WATER_IOR, microWaves, refractedCos, subgridSlopeVariance, type SkyPreset } from './waterOptics';
 
 /** Water body (inscatter) albedo in linear light: dark green-teal, a temperate cove rather than a tropical lagoon. */
@@ -57,8 +58,21 @@ uniform sampler2D uField;
 uniform vec4 uFieldXf;
 uniform vec2 uFieldHalf;
 uniform vec3 uCamPos;
+uniform sampler2D uWake;
+uniform vec4 uWakeXf;
 varying vec2 vSim;
 varying float vDist;
+
+// Boat wake from the local shallow-water window: r displacement, g foam, b wet sand, a edge fade.
+bool wakeUv(vec2 s, out vec2 uv) {
+  uv = (s - uWakeXf.xy) * uWakeXf.z;
+  return uWakeXf.w > 0.5 && uv.x > 0.0 && uv.y > 0.0 && uv.x < 1.0 && uv.y < 1.0;
+}
+vec2 wakeGrad(vec2 uv) {
+  float e = 1.0 / ${WAKE_N.toFixed(1)};
+  return vec2(texture(uWake, uv + vec2(e, 0.0)).r - texture(uWake, uv - vec2(e, 0.0)).r,
+              texture(uWake, uv + vec2(0.0, e)).r - texture(uWake, uv - vec2(0.0, e)).r) / (2.0 * ${WAKE_CELL.toFixed(4)});
+}
 
 vec4 fieldAt(vec2 s) { return texture(uField, (s - uFieldXf.xy) * uFieldXf.zw + uFieldHalf); }
 
@@ -100,6 +114,15 @@ uniform float uBaseRough;
 uniform float uGlint;
 uniform vec3 uBody;
 uniform float uMuSun;
+uniform sampler2D uLace;
+
+// Layered cellular lace (baked Voronoi edge distance) for wake and shore foam.
+float lacePattern(vec2 s) {
+  float l1 = texture(uLace, s * 0.21).r;
+  float l2 = texture(uLace, s * 0.53 + vec2(0.31, 0.17)).r;
+  float l3 = texture(uLace, s * 1.31 + vec2(0.7, 0.23)).r;
+  return (1.0 - smoothstep(0.0, 0.35, l1)) * 0.55 + (1.0 - smoothstep(0.0, 0.4, l2)) * 0.45 + (1.0 - smoothstep(0.0, 0.5, l3)) * 0.3;
+}
 
 vec2 currentAt(vec2 s) { return texture(uCurrent, (s - uCurXf.xy) * uCurXf.zw + uCurHalf).rg; }
 
@@ -139,7 +162,9 @@ export class Water {
   /** Water body (inscatter) albedo for the current sky; the seabed fades into the same color. */
   readonly bodyColor = BODY.clone();
 
-  constructor(field: FieldTexture, current: FieldTexture, noise: Texture) {
+  constructor(field: FieldTexture, current: FieldTexture, noise: Texture, extras: { wake?: WakeSim['uniforms']; lace?: Texture } = {}) {
+    const blank = new DataTexture(new Float32Array(4), 1, 1, RGBAFormat, FloatType);
+    blank.needsUpdate = true;
     const geom = makeRadialGrid(170, 192);
     this.uniforms = {
       uTime: { value: 0 },
@@ -175,6 +200,9 @@ export class Water {
       uGlint: { value: 1 },
       uBody: { value: BODY.clone() },
       uMuSun: { value: 0.9 },
+      uWake: extras.wake?.uWake ?? { value: blank },
+      uWakeXf: extras.wake?.uWakeXf ?? { value: new Vector4(0, 0, 1, 0) },
+      uLace: { value: extras.lace ?? blank },
     };
     // Physically based dielectric: Fresnel reflectance from water's index of refraction. The surface is composed
     // with premultiplied alpha: reflection is added in full, the view through the water is weighted by (1 - F).
@@ -203,6 +231,14 @@ export class Water {
           vec4 fld = fieldAt(sPos);
           vec2 wg;
           float wEta = waveEta(sPos, fld, fade, wg);
+          {
+            vec2 wkUv;
+            if (wakeUv(sPos, wkUv)) {
+              vec4 wk = texture(uWake, wkUv);
+              wEta += wk.r * wk.a;
+              wg += clamp(wakeGrad(wkUv), -0.8, 0.8) * wk.a;
+            }
+          }
           vec3 objectNormal = normalize(vec3(-wg.x, 1.0, wg.y));
           #ifdef USE_TANGENT
             vec3 objectTangent = vec3(1.0, 0.0, 0.0);
@@ -223,6 +259,16 @@ export class Water {
           float gust = clamp(gustAt(vSim) / 2.2, 0.0, 1.0);
           vec2 gW;
           float etaW = waveEta(vSim, fldF, 1.0, gW);
+          float wakeFoam = 0.0;
+          {
+            vec2 wkUv;
+            if (wakeUv(vSim, wkUv)) {
+              vec4 wk = texture(uWake, wkUv);
+              gW += clamp(wakeGrad(wkUv), -0.8, 0.8) * wk.a;
+              wakeFoam = wk.g * wk.a;
+            }
+          }
+          float lacePat = vDist < 400.0 ? lacePattern(vSim) : 0.6;
           float geoFade = 1.0 - smoothstep(120.0, 600.0, vDist);
           // Pixel footprint in metres: detail is faded before it aliases, and its slopes become roughness.
           vec2 fwS = fwidth(vSim);
@@ -257,6 +303,8 @@ export class Water {
           float swash = (1.0 - smoothstep(0.0, max(0.025, dW * 1.5), abs(depthF - runup))) * smoothstep(0.42, 0.72, nS2);
           float edge = (1.0 - smoothstep(0.0, max(0.035, dW * 1.5), depthF)) * smoothstep(0.35, 0.65, nS);
           float foam = max(swash * 0.65, edge * 0.8) * step(0.005, fldF.r);
+          // Break the shore band into lace up close.
+          foam *= mix(1.0, 0.3 + 0.9 * smoothstep(0.35, 0.95, lacePat), 1.0 - smoothstep(60.0, 220.0, vDist));
           // Flow-mapped foam streaks show the current.
           vec2 cur = currentAt(vSim);
           float cs = length(cur);
@@ -283,6 +331,14 @@ export class Water {
             float patchN = texture(uNoise, vSim * 0.045 + uWindDir * uTime * 0.03).g;
             float cap = windy * smoothstep(0.45, 0.8, crest) * smoothstep(0.55, 0.75, patchN) * smoothstep(0.5, 0.8, fldF.g) * fadeW;
             foam = max(foam, cap * 0.75);
+          }
+          // Boat wake foam: lace whose density follows the simulated foam, thinning into holes as it decays.
+          if (wakeFoam > 0.01) {
+            float br = texture(uNoise, vSim * 0.09).g;
+            float dens = wakeFoam * (0.15 + 2.1 * br * br);
+            float lace = smoothstep(1.05 - dens * 0.85, 1.2 - dens * 0.85, lacePat) * smoothstep(0.01, 0.08, wakeFoam);
+            float wf = clamp(lace * 0.85 + smoothstep(0.5, 1.0, wakeFoam) * 0.22 * br, 0.0, 0.92);
+            foam = max(foam, wf * (1.0 - smoothstep(150.0, 420.0, vDist)));
           }
           // Opaque overlays (foam, depth emphasis), composed front to back with premultiplied color.
           vec3 ovC = vec3(0.95, 0.97, 0.98) * foam;

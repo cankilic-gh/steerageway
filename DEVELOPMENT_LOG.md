@@ -876,3 +876,63 @@ Clipped pixels (≥ 245) stay at 0.01 to 0.05%.
 - `docs/screenshots/title.jpg` was refreshed at 1280×720.
 
 **Known gap (unchanged).** Back from the Tutorial to the title does not move focus back to a title control. Pause → Tutorial → Back does focus Resume.
+
+## Simulated wake, lace foam, land detail, trees and houses (2026-10-01, branch `feat/shore-water-visuals`)
+
+**Change.** A visual pass that ports the techniques from the Shore Water diorama (https://shorewater.thegridbase.com). Nothing in `src/sim` changed; physics, scoring and rules are untouched.
+
+- **Simulated wake** (`src/render/wakeSim.ts`). A virtual-pipes shallow-water solver on a 288² window (0.42 m cells, about 121 m) that follows the boat and re-centres in whole cells with hysteresis. It is visual only and carries just the hull's disturbance:
+  - The hull is a moving pressure patch scaled by the simulation's wake index, plus a bounded drag term.
+  - Effective depth is capped at 1.1 m, so the wave speed (about 3.3 m/s) sits below planing speed and the patch leaves a sharp V wake.
+  - Near shore the real seabed is used, so wash runs up the beach and wets the sand, which then dries over about 35 s.
+  - Foam forms behind the transom, along the chines, on breaking slopes and at the swash front. It is advected semi-Lagrangian and decays.
+  - An absorbing border stops reflections at the window edge.
+- **Rendering of the wake.** The water shader adds the wake displacement and gradient on top of the shared analytic waves. Wake foam is drawn as layered cellular lace from the existing caustic texture.
+  - On Normal and High the simulated wake replaces the ribbon `WakeTrail`. Low, or a browser without float render targets, keeps the ribbon.
+- **Shore foam.** The procedural swash and edge band is broken into lace up close.
+- **Terrain detail.**
+  - Sand: wind ripples (normal) and grain. Meadows: blade-scale speckle and clump mottling (albedo only, because a normal pattern at that scale read as water). Wet sand from the wake.
+  - Sand and meadow are classified by color ratio, so marsh stays plain.
+- **Meadow grass** (`src/render/grassField.ts`).
+  - Instanced three-blade tufts in two camera-following tiles: a wide one fading at 34 to 56 m and a dense near one fading at 11 to 17 m.
+  - Blades stand on a baked 2 m ground-height and density texture and sway in the wind.
+  - Hidden on Low, and skipped when no meadow is within reach of the camera.
+- **Trees and shrubs** (`src/render/vegetation.ts`).
+  - Smooth lobes with normals bent away from the crown centre, so a canopy lights as one soft volume. Seven lobes per broadleaf, and seven jagged, drooping needle tiers per pine.
+  - A world-space leaf-cluster noise (`addFoliageDetail`) so instances never look stamped.
+  - Boulders are now fractured by cutting planes.
+- **Houses** (`src/render/props.ts`).
+  - Body: stone foundation, clapboard siding (shader), corner boards, an attic gable.
+  - Roof: two thick shingled roof slabs with eaves and fascia (staggered-tab shader), and a ridge cap.
+  - Openings: four-pane framed windows with sills and reflective glass (shutters on two of three houses), a porch-roofed door on posts with a step, and a capped chimney.
+- `addUnderwaterAbsorption` now chains onto an existing `onBeforeCompile` instead of replacing it.
+
+**Tests.** These were written alongside the implementation, not RED first.
+- New `tests/unit/wakeSim.test.ts`: window centring, hysteresis, whole-cell shift, and forcing at idle, hump and plane.
+- New `tests/unit/grassField.test.ts`: meadow density on water, Sandspit, marsh and meadow, and meadow reach.
+- New `tests/e2e/wake.spec.ts`: the wake draws and its window follows the boat underway (Chrome + WebKit).
+- New devtools probe `wake()` (only with `?test=1`).
+
+| Run | Result |
+|---|---|
+| `npm run lint` / `npm run typecheck` | clean |
+| `npm test` | 21 files, 157 tests passed |
+| `npm run build` | OK |
+| `npm run e2e` | 52 passed (Chrome + WebKit) |
+
+**Performance** (headless Chrome, Apple M5, 1280×720, pixel ratio 1, Free Cruise underway along the west shore at x 300).
+
+| | Before | After |
+|---|---|---|
+| fps | 114 | 115 |
+| p95 frame | 9.1 ms | 10.3 ms |
+| triangles | 0.94 M | 2.89 M |
+
+The added triangles are mostly meadow blades within reach of the shore. Over open water the grass is not drawn.
+
+**Screenshots.** `docs/screenshots/wake.jpg` (V wake and lace foam) and `docs/screenshots/north-shore.jpg` (houses, trees, meadow).
+
+**Known gaps.**
+- The wake is a shallow-water approximation. Its V angle follows the capped wave speed, not the 19.5° Kelvin angle, and at idle it spreads as rings.
+- Docks and bulkheads are not obstacles in the wake window.
+- Meadow blades reach about 56 m from the camera. Beyond that the meadow is the shaded terrain.

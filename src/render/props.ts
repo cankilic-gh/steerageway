@@ -28,7 +28,7 @@ import { DOCK_A, DOCK_B, WORLD, type Gate, type MooredCraft } from '../sim/world
 import { makeLabelTexture } from './textures';
 import { groundHeight } from './terrain';
 import { createCraft, makePerson } from './boatModel';
-import { makeCanopyGeometry, makeGrassClumpGeometry, makePineGeometry, makeRockGeometry, makeShrubGeometry, makeTrunkGeometry } from './vegetation';
+import { addFoliageDetail, makeCanopyGeometry, makeGrassClumpGeometry, makePineGeometry, makeRockGeometry, makeShrubGeometry, makeTrunkGeometry } from './vegetation';
 
 const DECK_H = 0.9;
 
@@ -211,6 +211,61 @@ const makeLabelTextureFromCanvas = (c: HTMLCanvasElement): CanvasTexture => {
   return t;
 };
 
+/** Clapboard siding: overlapping horizontal boards, each lit lighter at its top and shadowed under its lip. */
+const makeSidingMaterial = (): MeshStandardMaterial => {
+  const m = new MeshStandardMaterial({ vertexColors: true, roughness: 0.82 });
+  m.onBeforeCompile = (shader) => {
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vSdWorld;\nvarying vec3 vSdNormal;')
+      .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvSdWorld = (modelMatrix * vec4(transformed, 1.0)).xyz;\nvSdNormal = normalize(mat3(modelMatrix) * objectNormal);');
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vSdWorld;\nvarying vec3 vSdNormal;')
+      .replace(
+        '#include <color_fragment>',
+        `#include <color_fragment>
+        {
+          float vertical = 1.0 - abs(vSdNormal.y);
+          float b = fract(vSdWorld.y / 0.19);
+          float boards = 0.8 + 0.22 * smoothstep(0.0, 0.85, b) - 0.22 * (1.0 - smoothstep(0.0, 0.07, b));
+          float fade = 1.0 - smoothstep(0.02, 0.09, length(fwidth(vSdWorld)));
+          diffuseColor.rgb *= mix(1.0, boards, vertical * mix(0.35, 1.0, fade));
+        }`,
+      );
+  };
+  m.customProgramCacheKey = () => 'siding';
+  return m;
+};
+
+/** Asphalt shingles: staggered tabs in rows down the slope, each tab tinted slightly differently. */
+const makeShingleMaterial = (): MeshStandardMaterial => {
+  const m = new MeshStandardMaterial({ vertexColors: true, roughness: 0.9 });
+  m.onBeforeCompile = (shader) => {
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vShWorld;')
+      .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvShWorld = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vShWorld;\nfloat shHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }')
+      .replace(
+        '#include <color_fragment>',
+        `#include <color_fragment>
+        {
+          float row = vShWorld.y / 0.13;
+          float ri = floor(row);
+          float along = dot(vShWorld.xz, vec2(0.7071)) / 0.34 + ri * 0.5;
+          float ti = floor(along);
+          float tab = shHash(vec2(ri, ti));
+          float gapRow = 1.0 - smoothstep(0.0, 0.1, fract(row));
+          float gapTab = 1.0 - smoothstep(0.0, 0.06, min(fract(along), 1.0 - fract(along)));
+          float fade = 1.0 - smoothstep(0.02, 0.08, length(fwidth(vShWorld)));
+          float shade = (0.86 + 0.24 * tab) * (1.0 - 0.35 * max(gapRow, gapTab * 0.7));
+          diffuseColor.rgb *= mix(0.97, shade, fade);
+        }`,
+      );
+  };
+  m.customProgramCacheKey = () => 'shingles';
+  return m;
+};
+
 export const buildWorldProps = (gates: readonly Gate[], quality: 'low' | 'normal' | 'high'): WorldProps => {
   const root = new Group();
   const materials: Material[] = [];
@@ -311,44 +366,101 @@ export const buildWorldProps = (gates: readonly Gate[], quality: 'low' | 'normal
   for (const y of [590, 626]) deckRect(380, y - 0.6, 398, y + 0.6, true);
 
   // Buildings on the north shore and the marina office.
-  // Coastal houses: clapboard walls, gabled roofs with overhangs, trimmed windows, a door and a chimney.
-  const gableGeo = (w: number, d: number, h: number): BufferGeometry => {
-    const hw = w / 2 + 0.35;
-    const hd = d / 2 + 0.3;
+  // Coastal houses: stone foundation, clapboard walls with corner boards, thick shingled roofs with eaves and a
+  // ridge cap, framed four-pane windows with sills (shutters on some), a porch-roofed door and a capped chimney.
+  const sidingBatch = new Batch();
+  const roofBatch = new Batch();
+  const glassBatch = new Batch();
+  const TRIM = 0xf3f1ea;
+  const SHUTTERS = [0x2f4a3a, 0x24384f, 0x5a2b27, 0x3b3f44];
+  /** Pre-transform a part into house-local coordinates (tilt first, then offset); the batch applies yaw + position. */
+  const local = (geo: BufferGeometry, lx: number, ly: number, lz: number, rx = 0, ry = 0): BufferGeometry => {
+    if (rx) geo.rotateX(rx);
+    if (ry) geo.rotateY(ry);
+    geo.translate(lx, ly, lz);
+    return geo;
+  };
+  /** Attic gable: a triangular prism along x filling the roof ends. */
+  const atticGeo = (w: number, d: number, rise: number): BufferGeometry => {
+    const hw = w / 2;
+    const hd = d / 2;
     const p = [
-      -hw, 0, -hd, hw, 0, -hd, 0, h, -hd,
-      -hw, 0, hd, 0, h, hd, hw, 0, hd,
-      -hw, 0, -hd, 0, h, -hd, 0, h, hd, -hw, 0, -hd, 0, h, hd, -hw, 0, hd,
-      hw, 0, -hd, hw, 0, hd, 0, h, hd, hw, 0, -hd, 0, h, hd, 0, h, -hd,
+      -hw, 0, hd, -hw, rise, 0, -hw, 0, -hd,
+      hw, 0, -hd, hw, rise, 0, hw, 0, hd,
+      -hw, 0, hd, hw, 0, hd, hw, rise, 0, -hw, 0, hd, hw, rise, 0, -hw, rise, 0,
+      hw, 0, -hd, -hw, 0, -hd, -hw, rise, 0, hw, 0, -hd, -hw, rise, 0, hw, rise, 0,
     ];
     const g = new BufferGeometry();
     g.setAttribute('position', new BufferAttribute(new Float32Array(p), 3));
     g.computeVertexNormals();
     return g;
   };
+  let houseIndex = 0;
   const building = (x: number, y: number, w: number, d: number, h: number, wall: number, roof: number, rot = 0) => {
     const g0 = groundHeight(x, y);
-    const c = Math.cos(rot);
-    const sn = Math.sin(rot);
-    const at = (lx: number, lz: number): [number, number] => [X(x) + lx * c + lz * sn, Z(y) - lx * sn + lz * c];
-    paintBatch.add(new BoxGeometry(w, 0.5, d), 0x6d6a63, X(x), g0 + 0.2, Z(y), rot);
-    paintBatch.add(new BoxGeometry(w, h, d), wall, X(x), g0 + 0.45 + h / 2, Z(y), rot);
-    paintBatch.add(gableGeo(w, d, h * 0.5), roof, X(x), g0 + 0.45 + h, Z(y), rot);
-    // Windows with white trim on the long sides, a door, and a brick chimney.
-    const nWin = Math.max(2, Math.floor(w / 2.6));
+    const idx = houseIndex++;
+    const hasShutters = idx % 3 !== 1;
+    const shutter = SHUTTERS[idx % SHUTTERS.length]!;
+    const wx = X(x);
+    const wz = Z(y);
+    const base = g0 + 0.45;
+    const top = base + h;
+    const pitch = 0.62 + (idx % 4) * 0.06;
+    const hd = d / 2;
+    const rise = hd * Math.tan(pitch);
+    const over = 0.4;
+    const slab = 0.14;
+    const slopeLen = (hd + over) / Math.cos(pitch);
+    const put = (batch: Batch, geo: BufferGeometry, color: number | Color) => batch.add(geo, color, wx, 0, wz, rot);
+
+    put(paintBatch, local(new BoxGeometry(w + 0.12, 0.75, d + 0.12), 0, g0 + 0.08, 0), 0x77736b);
+    put(sidingBatch, local(new BoxGeometry(w, h, d), 0, base + h / 2, 0), wall);
+    put(sidingBatch, local(atticGeo(w, d, rise), 0, top, 0), wall);
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) put(paintBatch, local(new BoxGeometry(0.16, h, 0.16), sx * (w / 2 + 0.01), base + h / 2, sz * (hd + 0.01)), TRIM);
+    // Roof slabs, ridge cap and fascia boards.
+    for (const side of [-1, 1]) {
+      const cz = side * ((hd + over) / 2);
+      const cy = top + rise - ((hd + over) / 2) * Math.tan(pitch) + (slab / 2) / Math.cos(pitch);
+      put(roofBatch, local(new BoxGeometry(w + over * 1.6, slab, slopeLen), 0, cy, cz, side * pitch), roof);
+      const ez = side * (hd + over);
+      const ey = top - over * Math.tan(pitch) + 0.02;
+      put(paintBatch, local(new BoxGeometry(w + over * 1.6 + 0.04, 0.2, 0.06), 0, ey, ez), TRIM);
+    }
+    put(roofBatch, local(new BoxGeometry(w + over * 1.6 + 0.06, 0.12, 0.34), 0, top + rise + slab * 0.9, 0), new Color(roof).multiplyScalar(0.8));
+    // Windows on the long sides and one in each gable.
+    const window = (lx: number, ly: number, lz: number, ry: number, ww: number, wh: number) => {
+      const out = 0.05;
+      put(paintBatch, local(new BoxGeometry(ww + 0.2, wh + 0.2, 0.08), lx, ly, lz, 0, ry), TRIM);
+      put(glassBatch, local(new BoxGeometry(ww, wh, 0.06), lx, ly, lz + 0, 0, ry).translate(Math.sin(ry) * out, 0, Math.cos(ry) * out), 0x1d2a33);
+      put(paintBatch, local(new BoxGeometry(0.06, wh, 0.1), lx, ly, lz, 0, ry).translate(Math.sin(ry) * out * 1.6, 0, Math.cos(ry) * out * 1.6), TRIM);
+      put(paintBatch, local(new BoxGeometry(ww, 0.06, 0.1), lx, ly, lz, 0, ry).translate(Math.sin(ry) * out * 1.6, 0, Math.cos(ry) * out * 1.6), TRIM);
+      put(paintBatch, local(new BoxGeometry(ww + 0.36, 0.07, 0.2), lx, ly - wh / 2 - 0.12, lz, 0, ry).translate(Math.sin(ry) * 0.06, 0, Math.cos(ry) * 0.06), TRIM);
+      if (hasShutters) {
+        for (const s of [-1, 1]) {
+          const ox = s * (ww / 2 + 0.33);
+          put(paintBatch, local(new BoxGeometry(0.4, wh + 0.1, 0.05), 0, 0, 0).translate(ox, 0, 0).rotateY(ry).translate(lx, ly, lz).translate(Math.sin(ry) * 0.05, 0, Math.cos(ry) * 0.05), shutter);
+        }
+      }
+    };
+    const nWin = Math.max(2, Math.floor(w / 2.8));
     for (let i = 0; i < nWin; i++) {
       const lx = -w / 2 + (w / nWin) * (i + 0.5);
-      for (const side of [-1, 1]) {
-        const [wx, wz] = at(lx, side * (d / 2 + 0.03));
-        paintBatch.add(new BoxGeometry(1.05, 1.25, 0.06), 0xf3f1ea, wx, g0 + 0.45 + h * 0.55, wz, rot);
-        const [ix, iz] = at(lx, side * (d / 2 + 0.07));
-        paintBatch.add(new BoxGeometry(0.85, 1.05, 0.04), 0x23313b, ix, g0 + 0.45 + h * 0.55, iz, rot);
-      }
+      if (Math.abs(lx) < 0.9 && i === Math.floor(nWin / 2)) continue;
+      window(lx, base + h * 0.56, hd + 0.04, 0, 0.95, 1.25);
+      window(lx, base + h * 0.56, -hd - 0.04, Math.PI, 0.95, 1.25);
     }
-    const [dx, dz] = at(0, d / 2 + 0.05);
-    paintBatch.add(new BoxGeometry(1.0, 2.0, 0.08), 0x4d3b2d, dx, g0 + 1.45, dz, rot);
-    const [cx, cz] = at(w * 0.28, 0);
-    paintBatch.add(new BoxGeometry(0.7, h * 0.9, 0.7), 0x8b4a3a, cx, g0 + 0.45 + h + h * 0.3, cz, rot);
+    for (const sx of [-1, 1]) window(sx * (w / 2 + 0.04), top + rise * 0.35, 0, sx * Math.PI / 2, 0.7, 0.8);
+    // Front door with a small porch roof on two posts and a step.
+    const doorX = nWin % 2 === 1 ? 0 : -w / (2 * nWin);
+    put(paintBatch, local(new BoxGeometry(1.25, 2.25, 0.08), doorX, base + 1.12, hd + 0.04), TRIM);
+    put(paintBatch, local(new BoxGeometry(0.95, 2.05, 0.09), doorX, base + 1.03, hd + 0.06), hasShutters ? shutter : 0x4d3b2d);
+    put(roofBatch, local(new BoxGeometry(2.1, 0.1, 1.3), doorX, base + 2.65, hd + 0.62, 0.22), roof);
+    for (const s of [-1, 1]) put(paintBatch, local(new BoxGeometry(0.1, 2.5, 0.1), doorX + s * 0.9, base + 1.25, hd + 1.15), TRIM);
+    put(paintBatch, local(new BoxGeometry(1.6, 0.18, 0.7), doorX, base - 0.09, hd + 0.5), 0x8d887e);
+    // Brick chimney with a cap, rising through the roof.
+    const chx = w * 0.28;
+    put(paintBatch, local(new BoxGeometry(0.75, rise + 1.6, 0.75), chx, top + (rise + 1.6) / 2 - 0.2, -hd * 0.3), 0x8b4a3a);
+    put(paintBatch, local(new BoxGeometry(0.95, 0.12, 0.95), chx, top + rise + 1.45, -hd * 0.3), 0x5d5953);
   };
   building(462, 722, 14, 9, 4.2, 0xe9e6de, 0x3f4247);
   building(545, 727, 18, 11, 5.5, 0x9d9a91, 0x4a4f55);
@@ -381,10 +493,19 @@ export const buildWorldProps = (gates: readonly Gate[], quality: 'low' | 'normal
   const paintMesh = paintBatch.build(paint);
   if (woodMesh) root.add(woodMesh);
   if (paintMesh) root.add(paintMesh);
+  const siding = makeSidingMaterial();
+  const shingles = makeShingleMaterial();
+  const glass = new MeshStandardMaterial({ vertexColors: true, roughness: 0.12, metalness: 0, envMapIntensity: 1.4 });
+  materials.push(siding, shingles, glass);
+  for (const [batch, mat] of [[sidingBatch, siding], [roofBatch, shingles], [glassBatch, glass]] as const) {
+    const mesh = batch.build(mat);
+    if (mesh) root.add(mesh);
+  }
 
   // Trees: broadleaf canopies, pitch pines and shoreline shrubs (instanced, vertex-shaded).
   const treeCount = quality === 'low' ? 160 : 380;
   const foliage = new MeshStandardMaterial({ vertexColors: true, roughness: 0.92 });
+  addFoliageDetail(foliage);
   const bark = new MeshStandardMaterial({ vertexColors: true, roughness: 1, color: 0x5a4a3b });
   const trunks = new InstancedMesh(makeTrunkGeometry(), bark, treeCount);
   const canopies = new InstancedMesh(makeCanopyGeometry(), foliage, treeCount);

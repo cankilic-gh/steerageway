@@ -37,6 +37,8 @@ export const attachDevtools = (app: App): void => {
     },
     /** Hero boat QA: active visual, load status and the animated parts' current rotations. */
     boat: () => app.view?.boatProbe() ?? null,
+    /** Wake QA: simulated wake on/off and its window centre (follows the boat). */
+    wake: () => app.view?.wakeProbe() ?? null,
     orbit: (radians: number) => {
       if (app.view) app.view.rig.orbit = radians;
     },

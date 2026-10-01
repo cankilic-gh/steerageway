@@ -1,4 +1,4 @@
-import { BufferAttribute, BufferGeometry, Color, Mesh, MeshStandardMaterial, SRGBColorSpace, Vector3, type Texture } from 'three';
+import { BufferAttribute, BufferGeometry, Color, DataTexture, FloatType, Mesh, MeshStandardMaterial, RGBAFormat, SRGBColorSpace, Vector3, Vector4, type IUniform, type Texture } from 'three';
 import { depthAnalytic, ROCK, valueNoise } from '../sim/world';
 import { smoothstep } from '../sim/units';
 import { ABSORPTION, WATER_IOR } from './waterOptics';
@@ -58,7 +58,11 @@ const colorAt = (x: number, y: number, h: number): Color => {
  */
 export const addUnderwaterAbsorption = (material: MeshStandardMaterial, optics: TerrainOptics): void => {
   const u = { uUwMuSun: optics.muSun, uUwBody: optics.body, uUwAbsorb: { value: new Vector3(...ABSORPTION) } };
-  material.onBeforeCompile = (shader) => {
+  // Chain onto any shader patch the material already has (e.g. foliage detail) instead of replacing it.
+  const prior = material.onBeforeCompile.bind(material);
+  const priorKey = material.customProgramCacheKey.bind(material);
+  material.onBeforeCompile = (shader, renderer) => {
+    prior(shader, renderer);
     Object.assign(shader.uniforms, u);
     shader.vertexShader = shader.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vUwWorld;').replace(
       '#include <project_vertex>',
@@ -87,7 +91,7 @@ export const addUnderwaterAbsorption = (material: MeshStandardMaterial, optics: 
         }`,
       );
   };
-  material.customProgramCacheKey = () => 'underwater-absorption';
+  material.customProgramCacheKey = () => `${priorKey()}|underwater-absorption`;
 };
 
 /** Terrain with dense cells over the play area and coarse cells toward the horizon. */
@@ -104,6 +108,8 @@ export interface TerrainDetail {
   caustic: Texture;
   time: { value: number };
   optics: TerrainOptics;
+  /** Boat-wake window: wet sand where the wash has run up the beach. */
+  wake?: { uWake: IUniform<Texture | null>; uWakeXf: IUniform<Vector4> };
 }
 
 /** Moving caustic network: two scrolled, domain-warped layers of a baked Voronoi edge-distance texture. */
@@ -117,6 +123,16 @@ float caustics(vec2 wp, float t, float depth) {
   float ra = 1.0 - smoothstep(0.0, w, texture(uCaustic, p / 8.0 + t * vec2(0.011, 0.006)).r);
   float rb = 1.0 - smoothstep(0.0, w, texture(uCaustic, p * (1.37 / 8.0) + vec2(0.31, 0.17) - t * vec2(0.007, 0.012)).r);
   return ra * 0.5 + rb * 0.35 + ra * rb * 1.1;
+}
+`;
+
+/** Wind ripples on sand: crests across the wind, warped by noise so they meander. */
+const SAND = /* glsl */ `
+float sandRipple(vec2 p) {
+  float warp = texture(uNoise, p * 0.021).r * 9.0 + texture(uNoise, p * 0.067).g * 3.0;
+  float ph = dot(p, vec2(0.83, 0.56)) * 6.2 + warp;
+  float r = sin(ph) * 0.5 + 0.5;
+  return r * r * (3.0 - 2.0 * r) * (0.55 + 0.45 * texture(uNoise, p * 0.05).b);
 }
 `;
 
@@ -173,7 +189,11 @@ export const buildTerrain = (quality: 'low' | 'normal' | 'high', detail?: Terrai
   g.computeVertexNormals();
   const mat = new MeshStandardMaterial({ vertexColors: true, roughness: 0.96, metalness: 0 });
   if (detail) {
+    const blank = new DataTexture(new Float32Array(4), 1, 1, RGBAFormat, FloatType);
+    blank.needsUpdate = true;
     const u = {
+      uWake: detail.wake?.uWake ?? { value: blank },
+      uWakeXf: detail.wake?.uWakeXf ?? { value: new Vector4(0, 0, 1, 0) },
       uNoise: { value: detail.noise },
       uCaustic: { value: detail.caustic },
       uTime: detail.time,
@@ -188,7 +208,7 @@ export const buildTerrain = (quality: 'low' | 'normal' | 'high', detail?: Terrai
         .replace('#include <common>', '#include <common>\nvarying vec3 vTerrainWorld;')
         .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvTerrainWorld = (modelMatrix * vec4(transformed, 1.0)).xyz;');
       shader.fragmentShader = shader.fragmentShader
-        .replace('#include <common>', `#include <common>\nvarying vec3 vTerrainWorld;\nuniform sampler2D uNoise;\nuniform float uTime;\nuniform float uSunVis;\nuniform float uMuSun;\nuniform vec3 uBody;\nuniform vec3 uAbsorb;\n${CAUSTICS}`)
+        .replace('#include <common>', `#include <common>\nvarying vec3 vTerrainWorld;\nuniform sampler2D uNoise;\nuniform float uTime;\nuniform float uSunVis;\nuniform float uMuSun;\nuniform vec3 uBody;\nuniform vec3 uAbsorb;\nuniform sampler2D uWake;\nuniform vec4 uWakeXf;\n${CAUSTICS}\n${SAND}`)
         .replace(
           '#include <color_fragment>',
           `#include <color_fragment>
@@ -221,11 +241,50 @@ export const buildTerrain = (quality: 'low' | 'normal' | 'high', detail?: Terrai
               vec3 lit = diffuseColor.rgb * (1.0 + caustic * cMask * 1.6 * vec3(0.95, 1.0, 0.92));
               diffuseColor.rgb = mix(uBody, lit, trans);
             }
+          }
+          // Surface detail up close: wind ripples and grain on sand, a tufted grain on meadows.
+          vec2 detailGrad = vec2(0.0);
+          float wakeWet = 0.0;
+          {
+            vec2 wp = vTerrainWorld.xz;
+            float h = vTerrainWorld.y;
+            float near = 1.0 - smoothstep(0.035, 0.12, length(fwidth(wp)));
+            float sandy = smoothstep(0.1, 0.16, (diffuseColor.r - diffuseColor.g) / max(diffuseColor.r, 0.01)) * step(h, 2.6);
+            if (near > 0.0 && sandy > 0.0) {
+              float e = 0.03;
+              float r0 = sandRipple(wp);
+              vec2 rg = vec2(sandRipple(wp + vec2(e, 0.0)) - r0, sandRipple(wp + vec2(0.0, e)) - r0) / e;
+              float amp = 0.012 * (1.0 - 0.6 * (1.0 - smoothstep(-0.05, 0.4, h)));
+              detailGrad += rg * amp * near * sandy;
+              diffuseColor.rgb *= 1.0 + (r0 - 0.5) * 0.08 * near * sandy;
+              diffuseColor.rgb *= 1.0 + (texture(uNoise, wp * 3.7).r - 0.5) * 0.1 * near * sandy;
+            }
+            float grassy = smoothstep(-0.02, 0.06, (diffuseColor.g - diffuseColor.r) / max(diffuseColor.g, 0.01)) * step(0.3, h);
+            if (grassy > 0.0) {
+              // Blade-scale speckle and clump mottling (albedo only: a normal pattern at this scale reads as water).
+              float fine = 1.0 - smoothstep(0.02, 0.07, length(fwidth(wp)));
+              float speck = texture(uNoise, wp * 6.3).r * 0.6 + texture(uNoise, wp * 13.1).g * 0.4;
+              float clump = texture(uNoise, wp * 0.55).b;
+              diffuseColor.rgb *= mix(1.0, 0.72 + 0.5 * speck, fine * grassy);
+              diffuseColor.rgb *= mix(1.0, 0.86 + 0.26 * clump, near * grassy);
+              diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(1.18, 1.08, 0.7), smoothstep(0.62, 0.85, clump) * near * grassy * 0.5);
+            }
+            // Wash from the boat's wake darkens the sand it reaches, then dries slowly.
+            vec2 wkUv = (vec2(wp.x, -wp.y) - uWakeXf.xy) * uWakeXf.z;
+            if (uWakeXf.w > 0.5 && wkUv.x > 0.0 && wkUv.y > 0.0 && wkUv.x < 1.0 && wkUv.y < 1.0) {
+              vec4 wk = texture(uWake, wkUv);
+              wakeWet = wk.b * wk.a * step(-0.05, h);
+              diffuseColor.rgb *= 1.0 - 0.32 * wakeWet;
+            }
           }`,
         )
         .replace(
           '#include <roughnessmap_fragment>',
-          '#include <roughnessmap_fragment>\nroughnessFactor = mix(roughnessFactor, 0.45, (1.0 - smoothstep(-0.05, 0.4, vTerrainWorld.y)) * step(-0.05, vTerrainWorld.y));',
+          '#include <roughnessmap_fragment>\nroughnessFactor = mix(roughnessFactor, 0.45, max((1.0 - smoothstep(-0.05, 0.4, vTerrainWorld.y)) * step(-0.05, vTerrainWorld.y), wakeWet));',
+        )
+        .replace(
+          '#include <normal_fragment_maps>',
+          '#include <normal_fragment_maps>\nnormal = normalize(normal + mat3(viewMatrix) * vec3(-detailGrad.x, 0.0, -detailGrad.y));',
         );
     };
   }

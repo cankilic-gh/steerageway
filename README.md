@@ -15,6 +15,9 @@ Or pick **Free Cruise** on the title screen: the same boat, water and weather wi
 | ![Title screen with Free Cruise and Mission](docs/screenshots/title.jpg) | ![Running the marked channel out to sea](docs/screenshots/channel.jpg) |
 | ![Clear shallows with moving caustics at the beach](docs/screenshots/water-shallows-caustics.jpg) | ![Debrief with chart replay and key moments](docs/screenshots/debrief.jpg) |
 
+| ![Simulated V wake with lace foam](docs/screenshots/wake.jpg) | ![North shore houses, trees and meadow](docs/screenshots/north-shore.jpg) |
+|---|---|
+
 More in [`docs/screenshots/`](docs/screenshots/), including the [water-optics before/current/final comparison](docs/screenshots/water-optics-comparison.jpg).
 
 The design comes from the research documents in this repository: `CONCEPT_REPORT.md`, `FIRST_MISSION.md`, `SOURCES.md` and `TECH_RESEARCH_ADDENDUM.md`. Implementation notes, RED/GREEN test evidence and verification results are in `DEVELOPMENT_LOG.md`.
