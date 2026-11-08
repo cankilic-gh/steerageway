@@ -102,10 +102,14 @@ export const BASE_GLINT_SHARPNESS = 6000;
 /** Toksvig-style widening of the Blinn-Phong glint lobe by unresolved slope variance. */
 export const glintSharpness = (base: number, lostVariance: number): number => 1 / (1 / base + 2 * lostVariance);
 
-export type SkyKind = 'sunny' | 'overcast';
+export type SkyKind = 'sunny' | 'overcast' | 'golden';
 
 export interface SkyPreset {
   kind: SkyKind;
+  /** Sun elevation above the horizon, degrees. */
+  sunElevationDeg: number;
+  /** Sun azimuth in three.js spherical terms, degrees (0 = +Z, 90 = +X). */
+  sunAzimuthDeg: number;
   turbidity: number;
   rayleigh: number;
   mieCoefficient: number;
@@ -134,6 +138,9 @@ export interface SkyPreset {
 export const SKY_PRESETS: Record<SkyKind, SkyPreset> = {
   sunny: {
     kind: 'sunny',
+    // Morning sun, about 30 degrees up in the east-southeast.
+    sunElevationDeg: 30,
+    sunAzimuthDeg: 62,
     turbidity: 2.6,
     rayleigh: 1.2,
     mieCoefficient: 0.0025,
@@ -156,6 +163,8 @@ export const SKY_PRESETS: Record<SkyKind, SkyPreset> = {
   },
   overcast: {
     kind: 'overcast',
+    sunElevationDeg: 30,
+    sunAzimuthDeg: 62,
     turbidity: 9,
     rayleigh: 0.6,
     mieCoefficient: 0.01,
@@ -176,10 +185,38 @@ export const SKY_PRESETS: Record<SkyKind, SkyPreset> = {
     glintStrength: 0.12,
     bodyTint: [0.82, 0.9, 0.9],
   },
+  golden: {
+    kind: 'golden',
+    // Last run of the day: sun 9 degrees up in the west, long shadows, warm light, a broad glitter path.
+    sunElevationDeg: 9,
+    sunAzimuthDeg: 262,
+    turbidity: 5.5,
+    rayleigh: 2.4,
+    mieCoefficient: 0.009,
+    mieDirectionalG: 0.82,
+    cloudCoverage: 0.35,
+    cloudDensity: 0.4,
+    skyGain: 0.85,
+    sunIntensity: 2.1,
+    sunColor: 0xffb46a,
+    hemiIntensity: 0.4,
+    hemiSky: 0x9fb0d0,
+    hemiGround: 0x4f4236,
+    fogColor: 0xc9a68c,
+    fogDensity: 0.00032,
+    exposure: 0.46,
+    sunVisibility: 0.9,
+    waterRoughness: 0.06,
+    glintStrength: 1.35,
+    bodyTint: [0.95, 0.92, 0.86],
+  },
 };
 
-/** Afternoon Chop comes with low cloud; every other condition is a clear morning. Presentation only. */
-export const skyForVariant = (id: VariantId): SkyKind => (id === 'V6' ? 'overcast' : 'sunny');
+/**
+ * Afternoon Chop comes with low cloud, Off Station is the last run of the day under a low western sun; every
+ * other condition is a clear morning. Presentation only: wind, current and scoring do not change.
+ */
+export const skyForVariant = (id: VariantId): SkyKind => (id === 'V6' ? 'overcast' : id === 'V8' ? 'golden' : 'sunny');
 
 /** Sun radiance reflected by a glint lobe of the given sharpness (normalized Blinn-Phong, Fresnel on V.H). */
 export const sunGlint = (sky: SkyPreset, sharpness: number, vDotH: number, nDotL: number): number =>

@@ -84,7 +84,7 @@ node scripts/qa-perf.mjs high 4173                               # perf report f
 
 Developer and test mode: open `http://localhost:5173/?test=1` to expose `window.__steerageway`. It offers:
 - `start(variant, seed, 'mission' | 'cruise')`
-- `setSky('sunny' | 'overcast' | null)`
+- `setSky('sunny' | 'overcast' | 'golden' | null)`
 - autopilot, fast-forward, teleport and perf
 - `boat()`: which boat visual is showing, its load status, and the wheel, lever, outboard and prop rotations
 
@@ -191,7 +191,7 @@ The player boat is an original, logo-free, **V20-inspired** open-bow outboard. I
 **Rendering and presentation** (Three.js r186 `WebGLRenderer`, WebGL 2)
 - **Sky and lighting:**
   - Physical sky with clouds and environment lighting.
-  - Sky presets change sky, light, haze and water together: a clear morning, and an overcast sky for Afternoon Chop.
+  - Sky presets change sky, light, haze and water together: a clear morning, an overcast sky for Afternoon Chop, and a low golden-hour sun with long shadows and a broad glitter path for Off Station.
   - The scene is composed in linear HDR and tone mapped once (ACES).
   - Sun-aligned shadows and exponential aerial haze.
 - **Water optics** (model in `src/render/waterOptics.ts`, unit-tested):

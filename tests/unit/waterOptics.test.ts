@@ -174,7 +174,12 @@ describe('sky presets', () => {
     expect(overcast.hemiIntensity).toBeGreaterThan(sunny.hemiIntensity);
   });
 
-  it('gives Afternoon Chop an overcast sky and every other condition a sunny one', () => {
-    for (const id of Object.keys(VARIANTS) as VariantId[]) expect(skyForVariant(id)).toBe(id === 'V6' ? 'overcast' : 'sunny');
+  it('gives Afternoon Chop an overcast sky, Off Station a low golden sun, and every other condition a sunny one', () => {
+    for (const id of Object.keys(VARIANTS) as VariantId[]) {
+      expect(skyForVariant(id)).toBe(id === 'V6' ? 'overcast' : id === 'V8' ? 'golden' : 'sunny');
+    }
+    const golden = SKY_PRESETS.golden;
+    expect(golden.sunElevationDeg).toBeLessThan(15);
+    expect(golden.glintStrength).toBeGreaterThan(SKY_PRESETS.sunny.glintStrength);
   });
 });

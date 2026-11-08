@@ -346,6 +346,7 @@ export class SceneView {
     if (kind === this.skyKindNow && this.scene.environment) return;
     this.skyKindNow = kind;
     const p = SKY_PRESETS[kind];
+    this.sunDir.setFromSphericalCoords(1, (90 - p.sunElevationDeg) * (Math.PI / 180), p.sunAzimuthDeg * (Math.PI / 180));
     const su = this.sky.material.uniforms;
     su['turbidity']!.value = p.turbidity;
     su['rayleigh']!.value = p.rayleigh;

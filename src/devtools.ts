@@ -30,7 +30,7 @@ export const attachDevtools = (app: App): void => {
     setCamera: (mode: 'chase' | 'helm' | 'top') => {
       if (app.view) app.view.rig.mode = mode;
     },
-    /** Visual QA: force the sunny or overcast sky (null returns to the condition's own sky). */
+    /** Visual QA: force the sunny, overcast or golden sky (null returns to the condition's own sky). */
     setSky: (kind: SkyKind | null) => {
       app.view?.setSkyOverride(kind, app.sim ?? undefined);
       return app.view?.skyKind ?? null;
